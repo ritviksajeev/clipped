@@ -46,11 +46,21 @@ def performance(uploads: list[dict]) -> dict[int, float]:
         return {}
 
     def ranks(values: list[float]) -> list[float]:
+        """Percentile ranks in 0..1; ties share their average rank."""
+        if len(values) == 1:
+            return [0.5]
         order = sorted(range(len(values)), key=lambda i: values[i])
         r = [0.0] * len(values)
-        n = max(len(values) - 1, 1)
-        for pos, idx in enumerate(order):
-            r[idx] = pos / n if len(values) > 1 else 0.5
+        n = len(values) - 1
+        pos = 0
+        while pos < len(order):
+            end = pos
+            while end + 1 < len(order) and values[order[end + 1]] == values[order[pos]]:
+                end += 1
+            avg = (pos + end) / 2 / n
+            for k in range(pos, end + 1):
+                r[order[k]] = avg
+            pos = end + 1
         return r
 
     views = [math.log1p(u["stats"].get("views", 0) or 0) for u in uploads]
@@ -93,11 +103,14 @@ def choose_styles(uploads: list[dict], n: int, *, min_samples: int = 6, explore_
         # Explore: least-tried styles first, random tiebreak.
         order = sorted(STYLES, key=lambda s: (stats[s]["n"], rng.random()))
         return order[:n]
+    # Exploit: Thompson-sample among styles with evidence; untried styles are
+    # reached through the explore branch above, not by a flat prior here.
     draws = {}
     for style, s in stats.items():
-        alpha = 1 + s["sum"]
-        beta = 1 + (s["n"] - s["sum"])
-        draws[style] = rng.betavariate(alpha, beta)
+        if s["n"] >= 2:
+            draws[style] = rng.betavariate(1 + s["sum"], 1 + (s["n"] - s["sum"]))
+        else:
+            draws[style] = -1.0 + rng.random() * 0.01
     return sorted(STYLES, key=lambda s: draws[s], reverse=True)[:n]
 
 
