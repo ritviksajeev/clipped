@@ -11,6 +11,7 @@ until approved; auto-mode clips upload on the schedule.
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 import shutil
 import threading
@@ -78,6 +79,7 @@ class Engine:
         self._loop_task: asyncio.Task | None = None
         self._lock = threading.RLock()
         self.tick_seconds = 10.0
+        self.rng = random.Random()
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -492,7 +494,7 @@ class Engine:
         styles = learning.choose_styles(self.db.uploads_with_stats(), gs.metadata.variants,
                                         min_samples=gs.optimizer.min_samples_for_styles,
                                         explore_rate=gs.optimizer.explore_rate if gs.optimizer.enabled else 1.0,
-                                        now=self.clock())
+                                        rng=self.rng, now=self.clock())
         opts = self.build_options(gs, cat, styles)
         if facecam:
             opts.reframe = opts.reframe.model_copy(update={"mode": "split", "facecam": facecam})

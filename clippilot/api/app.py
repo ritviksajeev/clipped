@@ -170,6 +170,14 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         data["auto_warning_acknowledged"] = db.get_global_settings().auto_warning_acknowledged_at is not None
         return data
 
+    @app.get("/api/about")
+    def about():
+        from ..pipeline.ffmpeg import has_libass
+
+        ff = config.find_binary("ffmpeg")
+        return {"version": config.APP_VERSION, "data_dir": str(config.data_dir()), "ffmpeg": ff,
+                "libass": bool(ff) and has_libass(), "secret_storage": store.backend_name}
+
     @app.post("/api/engine/start")
     async def engine_start():
         if not config.find_binary("ffmpeg"):
@@ -418,7 +426,11 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         view = item_view(item)
         view["stats"] = db.stats_for(item_id)
         clip = db.get_clip(item["clip_id"])
-        view["clip"] = clip["clip"].model_dump(mode="json") if clip else None
+        if clip:
+            view["clip"] = clip["clip"].model_dump(mode="json")
+            view["clip"]["channel_url"] = clip["clip"].channel_url
+        else:
+            view["clip"] = None
         return view
 
     @app.patch("/api/items/{item_id}")

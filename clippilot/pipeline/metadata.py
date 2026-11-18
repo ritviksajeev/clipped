@@ -123,7 +123,7 @@ def template_variants(clip: ClipInfo, transcript_text: str, styles: list[str], h
             hook = rng.choice(["HOW?!", "DID THAT JUST HAPPEN?", "WAIT... WHAT?"])
             blurb = f"{base}. You have to see the ending."
         elif style == "streamer":
-            title = f"{streamer}: {base}"
+            title = base if streamer.lower() in base.lower() else f"{streamer}: {base}"
             hook = f"{streamer.upper()} DID WHAT?!" if len(streamer) <= 14 else "WATCH THIS"
             blurb = f"A {game} moment from {streamer}'s stream."
         else:  # descriptive

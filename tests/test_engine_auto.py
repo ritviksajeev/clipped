@@ -1,3 +1,4 @@
+import random
 from datetime import timedelta
 
 from clippilot.db import iso
@@ -37,7 +38,8 @@ def test_auto_mode_prefers_learned_title_style(tmp_path, sample_clip):
     gs.optimizer.explore_rate = 0.0
     db.save_global_settings(gs)
     cat = db.add_category("516575", "VALORANT", settings=CategorySettings(max_clips_per_day=10))
-    seed_history(db, clock, cat_id=cat["id"])
+    seed_history(db, clock, n=30, cat_id=cat["id"])
+    engine.rng = random.Random(1234)
     twitch.clips = [make_clip(0, sample_clip, now=clock(), streamer="Fresh", login="fresh")]
     engine.fetch_due()
     item = engine.render_step()

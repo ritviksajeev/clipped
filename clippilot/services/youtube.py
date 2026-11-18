@@ -202,7 +202,10 @@ class YouTubeClient:
             raise YouTubeError(f"could not reach Google ({type(exc).__name__})", "network") from exc
         if resp.status_code >= 400:
             reason, message = _error_reason(resp)
-            if reason in ("invalid_grant", "unauthorized_client", "invalid_client"):
+            if reason in ("invalid_client", "unauthorized_client"):
+                raise AuthError("Google rejected the OAuth client ID/secret. Check Settings → YouTube, then reconnect.",
+                                reason, resp.status_code)
+            if reason == "invalid_grant":
                 raise AuthError(
                     "YouTube access expired or was revoked. Reconnect YouTube in Settings. "
                     "(Apps in Google 'Testing' mode lose access after 7 days - see the setup guide.)",
