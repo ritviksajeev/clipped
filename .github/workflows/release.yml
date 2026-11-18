@@ -1,0 +1,83 @@
+name: release
+
+# Push a tag like v0.1.0 to build the desktop apps and publish a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: ClipPilot-windows-x64.zip
+          - os: macos-15
+            artifact: ClipPilot-macos-arm64.zip
+          - os: macos-15-intel
+            artifact: ClipPilot-macos-x64.zip
+          - os: ubuntu-22.04
+            artifact: ClipPilot-linux-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build dashboard
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install . "pyinstaller>=6.6"
+      - name: Download ffmpeg (verified to include libass)
+        run: python scripts/fetch_ffmpeg.py
+      - name: Build app
+        run: pyinstaller packaging/clippilot.spec --noconfirm
+      - name: Smoke test
+        shell: bash
+        env:
+          CLIPPILOT_HOME: ${{ runner.temp }}/clippilot-smoke
+          CLIPPILOT_SECRETS_FILE: ${{ runner.temp }}/clippilot-smoke/secrets.json
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then dist/ClipPilot/ClipPilot.exe doctor; else dist/ClipPilot/ClipPilot doctor; fi
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/ClipPilot -DestinationPath ${{ matrix.artifact }}
+      - name: Archive (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/ClipPilot ${{ matrix.artifact }}
+      - name: Archive (Linux)
+        if: runner.os == 'Linux'
+        run: tar -C dist -czf ${{ matrix.artifact }} ClipPilot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

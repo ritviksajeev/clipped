@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect YouTube (Google Cloud setup) · ClipPilot</title>
+<meta name="description" content="ClipPilot uploads through the official YouTube Data API v3 and reads performance from the YouTube Analytics API, using an OAuth client that you create in your o">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html" class="active">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Connect YouTube (Google Cloud setup)</h1>
+<p>ClipPilot uploads through the official <strong>YouTube Data API v3</strong> and reads performance from the <strong>YouTube Analytics API</strong>, using an OAuth client that <strong>you</strong> create in your own Google Cloud project. It's free and takes about 10 minutes. Because the project is yours, Google will show an "unverified app" warning when you sign in. That's expected: you are the developer.</p>
+<blockquote>
+<p><strong>Important: uploads may be private at first.</strong> YouTube locks videos uploaded through API projects that haven't passed YouTube's free API compliance audit to <strong>private</strong>. ClipPilot detects this and tells you. To publish publicly from the API, submit the audit form (step 7). Until then you can open each private video in YouTube Studio and switch it to Public yourself.</p>
+</blockquote>
+<h2>1. Create a Google Cloud project</h2>
+<ol>
+<li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">https://console.cloud.google.com/</a> and sign in with the Google account that owns your YouTube channel.</li>
+<li>Click the project picker at the top, then <strong>New Project</strong>. Name it <code>ClipPilot</code> and click <strong>Create</strong>.</li>
+<li>Make sure the new project is selected in the picker.</li>
+</ol>
+<p>No billing account is needed.</p>
+<h2>2. Enable the two YouTube APIs</h2>
+<ol>
+<li>Open <strong>APIs &amp; Services → Library</strong>: <a href="https://console.cloud.google.com/apis/library" target="_blank" rel="noopener">https://console.cloud.google.com/apis/library</a>.</li>
+<li>Search <strong>YouTube Data API v3</strong>, open it, and click <strong>Enable</strong>.</li>
+<li>Search <strong>YouTube Analytics API</strong>, open it, and click <strong>Enable</strong>.</li>
+</ol>
+<h2>3. Configure the OAuth consent screen</h2>
+<p>Google calls this area <strong>Google Auth Platform</strong> (older consoles say <strong>OAuth consent screen</strong>).</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">https://console.cloud.google.com/auth/overview</a> and click <strong>Get started</strong>.</li>
+<li><strong>App information:</strong> app name <code>ClipPilot</code>, support email = your email.</li>
+<li><strong>Audience:</strong> choose <strong>External</strong>.</li>
+<li><strong>Contact information:</strong> your email. Agree to the policy and click <strong>Create</strong>.</li>
+<li>Open <strong>Audience</strong> and, under <strong>Test users</strong>, click <strong>Add users</strong> and add the Google account that owns your channel.</li>
+<li>Open <strong>Data Access → Add or remove scopes</strong> and add:
+   * <code>https://www.googleapis.com/auth/youtube.upload</code>
+   * <code>https://www.googleapis.com/auth/youtube.readonly</code>
+   * <code>https://www.googleapis.com/auth/yt-analytics.readonly</code></li>
+</ol>
+<p>Click <strong>Update</strong>, then <strong>Save</strong>.</p>
+<h3>Testing vs. In production</h3>
+<p>While the app is in <strong>Testing</strong>, Google expires your sign-in after <strong>7 days</strong> and ClipPilot will ask you to reconnect. To avoid that, open <strong>Audience</strong> and click <strong>Publish app</strong> → <strong>Confirm</strong>. The app stays unverified, which is fine for personal use (unverified apps are limited to 100 users). You do <strong>not</strong> need to submit it for Google verification.</p>
+<h2>4. Create the OAuth client</h2>
+<ol>
+<li>Open <strong>Clients</strong> (or <strong>APIs &amp; Services → Credentials</strong>): <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">https://console.cloud.google.com/auth/clients</a>.</li>
+<li>Click <strong>Create client</strong>.</li>
+<li><strong>Application type: Desktop app</strong>. Name it <code>ClipPilot desktop</code> and click <strong>Create</strong>.</li>
+<li>Click <strong>Download JSON</strong> (the file is named like <code>client_secret_….json</code>).</li>
+</ol>
+<p>A <em>Desktop app</em> client works with ClipPilot's local sign-in page on any port. If you choose <em>Web application</em> instead, add <code>http://localhost:8000/oauth2callback</code> as an authorized redirect URI.</p>
+<h2>5. Add the client to ClipPilot</h2>
+<ol>
+<li>In ClipPilot open <strong>Settings → YouTube</strong>.</li>
+<li>Either paste the whole downloaded JSON into <strong>Paste client JSON</strong>, or copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the two fields.</li>
+<li>Click <strong>Save</strong>.</li>
+</ol>
+<h2>6. Connect your channel</h2>
+<ol>
+<li>Click <strong>Connect YouTube</strong>. A Google sign-in tab opens.</li>
+<li>Pick the account that owns your channel.</li>
+<li>You'll see <strong>Google hasn't verified this app</strong>. Click <strong>Advanced</strong> → <strong>Go to ClipPilot (unsafe)</strong>. This is your own app.</li>
+<li>Allow the requested permissions.</li>
+<li>You're sent back to ClipPilot and the channel name appears in Settings.</li>
+</ol>
+<h2>7. Optional: pass the API audit so uploads can be public</h2>
+<ol>
+<li>Open the <strong>YouTube API Services Audit and Quota Extension Form</strong>: <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" rel="noopener">https://support.google.com/youtube/contact/yt_api_form</a>.</li>
+<li>Choose the audit option, describe ClipPilot as "a personal tool that uploads my own edited Shorts of Twitch clips with streamer credit", and list your project number (shown on the Cloud console dashboard).</li>
+<li>Google reviews it, which can take a few weeks. Once approved, uploads use the privacy you chose in Settings.</li>
+</ol>
+<h2>Quota</h2>
+<p>A new project gets <strong>10,000 units per day</strong>, reset at midnight Pacific time. One upload costs about 1,600 units (plus 50 for a custom thumbnail), so <strong>about 6 uploads per day</strong>. ClipPilot tracks this on the dashboard, stops before it runs out, and resumes after the reset. The same audit form can request more quota.</p>
+<h2>Custom thumbnails</h2>
+<p>YouTube only accepts custom thumbnails from <strong>phone-verified</strong> channels (<a href="https://www.youtube.com/verify" target="_blank" rel="noopener">https://www.youtube.com/verify</a>). If yours isn't verified, uploads still work and ClipPilot simply skips the thumbnail. Note that the Shorts feed itself usually shows a frame from the video rather than the custom thumbnail.</p>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

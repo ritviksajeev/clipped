@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+**/node_modules
+frontend/dist
+clippilot/web
+packaging/bin
+build
+dist
+tests
+website
+*.log

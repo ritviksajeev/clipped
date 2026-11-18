@@ -11,3 +11,5 @@ clippilot/web/
 .clippilot-dev/
 *.log
 .DS_Store
+packaging/bin/
+clippilot-output/

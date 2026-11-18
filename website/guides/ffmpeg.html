@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install ffmpeg (only if it&#x27;s missing) · ClipPilot</title>
+<meta name="description" content="The desktop downloads include ffmpeg. You only need this page if the dashboard says ffmpeg is not installed, or if you run ClipPilot from source.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html" class="active">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Install ffmpeg (only if it's missing)</h1>
+<p>The desktop downloads include ffmpeg. You only need this page if the dashboard says <strong>ffmpeg is not installed</strong>, or if you run ClipPilot from source.</p>
+<p>ClipPilot needs an ffmpeg build with <strong>libass</strong>, which burns in the captions. All the builds below include it.</p>
+<h2>Windows</h2>
+<ul>
+<li>With winget, in PowerShell: <code>winget install --id Gyan.FFmpeg -e</code></li>
+<li>Or download the "release full" build from <a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">https://www.gyan.dev/ffmpeg/builds/</a>, unzip it, and add its <code>bin</code> folder to your PATH.</li>
+</ul>
+<h2>macOS</h2>
+<ul>
+<li>With Homebrew: <code>brew install ffmpeg</code></li>
+</ul>
+<h2>Linux</h2>
+<ul>
+<li>Debian/Ubuntu: <code>sudo apt install ffmpeg</code></li>
+<li>Fedora: <code>sudo dnf install ffmpeg</code> (enable RPM Fusion first)</li>
+<li>Arch: <code>sudo pacman -S ffmpeg</code></li>
+</ul>
+<h2>Check it</h2>
+<p>Run <code>clippilot doctor</code> (or open <strong>Settings → About</strong> in the dashboard). Every line should say <code>ok</code>. To use a specific ffmpeg, set the environment variables <code>CLIPPILOT_FFMPEG</code> and <code>CLIPPILOT_FFPROBE</code> to their full paths.</p>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optional: AI titles with your own Anthropic or OpenAI key · ClipPilot</title>
+<meta name="description" content="ClipPilot writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, add your own API key. You pa">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" class="active">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Optional: AI titles with your own Anthropic or OpenAI key</h1>
+<p>ClipPilot writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, add your own API key. You pay the provider directly for what you use, usually a fraction of a cent per clip.</p>
+<p>Whichever generator you use, ClipPilot always adds the streamer credit, the channel link, the original clip link and <code>#Shorts</code> itself. A model can't drop them.</p>
+<h2>Anthropic (Claude)</h2>
+<ol>
+<li>Create an account at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">https://console.anthropic.com/</a> and add credit under <strong>Billing</strong>.</li>
+<li>Open <strong>API Keys</strong> → <strong>Create Key</strong>, name it <code>ClipPilot</code>, and copy the key (it starts with <code>sk-ant-</code>).</li>
+<li>In ClipPilot: <strong>Settings → Titles &amp; AI</strong>, paste it under <strong>Anthropic API key</strong>, set <strong>Title generator</strong> to <strong>Anthropic</strong>, and save.</li>
+<li>The default model is <code>claude-opus-5-5</code>. For the cheapest option, set the model to <code>claude-haiku-5-5</code>.</li>
+</ol>
+<h2>OpenAI</h2>
+<ol>
+<li>Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">https://platform.openai.com/api-keys</a>.</li>
+<li>In ClipPilot paste it under <strong>OpenAI API key</strong>, set <strong>Title generator</strong> to <strong>OpenAI</strong>, and enter a model name your account can use.</li>
+</ol>
+<h2>How variants work</h2>
+<p>For every clip ClipPilot writes 2-3 title <em>styles</em> (hype, question, descriptive, streamer-first). In the review queue you can pick one or edit it. In Auto mode the optimizer tracks which style earns the most views and retention on <strong>your</strong> channel and favours it, while still trying the others occasionally.</p>
+<p>If the provider is unreachable or the key is wrong, ClipPilot falls back to the free templates and notes it in the log.</p>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

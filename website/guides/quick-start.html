@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick start · ClipPilot</title>
+<meta name="description" content="ClipPilot runs entirely on your computer. It finds popular Twitch clips in the categories you pick, turns them into captioned vertical Shorts, and uploads them ">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html" class="active">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Quick start</h1>
+<p>ClipPilot runs entirely on your computer. It finds popular Twitch clips in the categories you pick, turns them into captioned vertical Shorts, and uploads them to <strong>your</strong> YouTube channel with <strong>your</strong> API keys. Nothing is sent to a ClipPilot server. There isn't one.</p>
+<h2>What you need</h2>
+<table>
+<thead>
+<tr>
+<th>Thing</th>
+<th>Cost</th>
+<th>Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A Twitch account with two-factor authentication on</td>
+<td>free</td>
+<td>2 min</td>
+</tr>
+<tr>
+<td>A Twitch developer app (Client ID + Secret)</td>
+<td>free</td>
+<td>3 min</td>
+</tr>
+<tr>
+<td>A Google Cloud project with the YouTube APIs enabled</td>
+<td>free</td>
+<td>10 min</td>
+</tr>
+<tr>
+<td>ffmpeg (bundled in the desktop app)</td>
+<td>free</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Optional: an Anthropic or OpenAI API key for AI titles</td>
+<td>pay-as-you-go</td>
+<td>2 min</td>
+</tr>
+</tbody>
+</table>
+<h2>Steps</h2>
+<ol>
+<li><strong>Install and open ClipPilot.</strong> The dashboard opens at <a href="http://localhost:8000" target="_blank" rel="noopener">http://localhost:8000</a>. It is only reachable from your own computer.</li>
+<li><strong>Twitch keys:</strong> follow <a href="twitch.html">Get your Twitch Client ID and Secret</a>, paste both into <strong>Settings → Twitch</strong>, and click <strong>Test</strong>.</li>
+<li><strong>YouTube:</strong> follow <a href="youtube.html">Connect YouTube (Google Cloud setup)</a>, then click <strong>Connect YouTube</strong> in Settings.</li>
+<li><strong>Pick categories:</strong> in <strong>Categories</strong>, search for a game (Valorant, Counter-Strike, Fortnite, anything) and add it. Each category has its own minimum views, clip age window, language, daily limit, allowlist/blocklist and hashtags.</li>
+<li><strong>Press Start</strong> on the dashboard. ClipPilot fetches clips, renders the best ones, and puts them in the <strong>Review</strong> queue.</li>
+<li><strong>Review:</strong> watch each Short, edit the title, description, hashtags, hook text or thumbnail, then click <strong>Approve</strong>. Nothing is uploaded until you approve it.</li>
+<li>When you trust the results, you can switch categories (or everything) to <strong>Auto mode</strong>. Read <a href="safety.html">Auto mode &amp; staying safe</a> first.</li>
+</ol>
+<h2>What happens to each clip</h2>
+<p>fetch top clips → skip anything already seen → download → transcribe on your computer (whisper) → burn in word-by-word captions → reframe to 9:16 → hook (trim dead air, flash-forward, on-screen hook text) → title, description and hashtags → thumbnail → review queue or scheduled upload.</p>
+<p>Every upload credits the streamer by name, links their channel and the original clip, and includes <code>#Shorts</code>.</p>
+<h2>Where your data lives</h2>
+<ul>
+<li>Settings, queue and history: a SQLite file in your user data folder (shown under <strong>Settings → About</strong>).</li>
+<li>API keys: your operating system's keychain (Windows Credential Manager, macOS Keychain, or Linux Secret Service). Keys are never logged and never leave your computer except to the service they belong to.</li>
+<li>Whisper speech models are downloaded once from Hugging Face on first use, then run offline.</li>
+</ul>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

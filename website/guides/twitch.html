@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get your Twitch Client ID and Secret · ClipPilot</title>
+<meta name="description" content="ClipPilot uses the official Twitch Helix API to search categories and list top clips. You create your own free &quot;application&quot; on Twitch&#x27;s developer console, whic">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html" class="active">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Get your Twitch Client ID and Secret</h1>
+<p>ClipPilot uses the official Twitch Helix API to search categories and list top clips. You create your own free "application" on Twitch's developer console, which gives you a Client ID and a Client Secret.</p>
+<h2>1. Turn on two-factor authentication</h2>
+<p>Twitch requires 2FA before you can register apps.</p>
+<ol>
+<li>Go to <a href="https://www.twitch.tv/settings/security" target="_blank" rel="noopener">https://www.twitch.tv/settings/security</a>.</li>
+<li>Under <strong>Two-Factor Authentication</strong>, click <strong>Set Up Two-Factor Authentication</strong> and follow the steps.</li>
+</ol>
+<h2>2. Register an application</h2>
+<ol>
+<li>Open the developer console: <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">https://dev.twitch.tv/console/apps</a> and log in.</li>
+<li>Click <strong>Register Your Application</strong> (or <strong>+ Register Your Application</strong>).</li>
+<li>Fill in:
+   * <strong>Name:</strong> anything unique, for example <code>ClipPilot-yourname</code>. Twitch names must be globally unique.
+   * <strong>OAuth Redirect URLs:</strong> <code>http://localhost</code>. ClipPilot doesn't use it, but the field is required.
+   * <strong>Category:</strong> <code>Application Integration</code>.
+   * <strong>Client Type:</strong> <code>Confidential</code>. Confidential is required to get a secret.</li>
+<li>Complete the captcha and click <strong>Create</strong>.</li>
+</ol>
+<h2>3. Copy the Client ID and create a secret</h2>
+<ol>
+<li>In the app list, click <strong>Manage</strong> next to your new app.</li>
+<li>Copy the <strong>Client ID</strong>.</li>
+<li>Click <strong>New Secret</strong> and copy the <strong>Client Secret</strong>. Twitch shows it only once. If you lose it, just create a new one.</li>
+</ol>
+<h2>4. Paste them into ClipPilot</h2>
+<ol>
+<li>In ClipPilot open <strong>Settings → Twitch</strong>.</li>
+<li>Paste the Client ID and the Client Secret, then click <strong>Save</strong>.</li>
+<li>Click <strong>Test</strong>. You should see "Twitch connected".</li>
+</ol>
+<p>The keys are stored in your operating system's keychain. ClipPilot uses them only to get an <em>app access token</em> from <code>id.twitch.tv</code> and to call <code>api.twitch.tv</code>.</p>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>"Twitch rejected the Client ID / Secret"</strong>: the secret was mistyped or regenerated. Create a new secret and paste it again.</li>
+<li><strong>No clips found</strong>: lower the category's <em>minimum views</em> or widen the <em>clip age window</em>. Small categories may have few clips in 48 hours.</li>
+</ul>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

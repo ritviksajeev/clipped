@@ -1,0 +1,10 @@
+# Netlify: static site only, no functions, no server-side processing.
+[build]
+  publish = "website"
+  command = "pip install markdown && python scripts/build_website.py"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

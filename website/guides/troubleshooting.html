@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting · ClipPilot</title>
+<meta name="description" content="ClipPilot setup guide">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html" class="active">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Troubleshooting</h1>
+<p><strong>The dashboard won't open.</strong> Visit <a href="http://localhost:8000" target="_blank" rel="noopener">http://localhost:8000</a> yourself. If another program uses port 8000, start ClipPilot with <code>clippilot serve --port 8010</code>. With a Web-application Google client, add the new redirect URI too.</p>
+<p><strong>"YouTube access expired or was revoked."</strong> Your Google app is still in <em>Testing</em> mode, which expires sign-ins after 7 days. Publish the app (see the YouTube guide, step 3), then click <strong>Connect YouTube</strong> again.</p>
+<p><strong>Uploads are private even though I chose Public.</strong> Your Google Cloud project hasn't passed the YouTube API audit yet. See the YouTube guide, step 7. In the meantime, switch videos to Public in YouTube Studio.</p>
+<p><strong>"quotaExceeded".</strong> You've used the day's 10,000 API units (about 6 uploads). ClipPilot resumes automatically after midnight Pacific time.</p>
+<p><strong>Thumbnail not set.</strong> Verify your channel with a phone number at <a href="https://www.youtube.com/verify" target="_blank" rel="noopener">https://www.youtube.com/verify</a>.</p>
+<p><strong>Captions are missing or use the wrong font.</strong> Your ffmpeg lacks libass. Install one of the builds in the ffmpeg guide and run <code>clippilot doctor</code>.</p>
+<p><strong>The first clip takes a long time.</strong> The first run downloads the whisper speech model (about 150 MB for <code>base</code>). Later clips take seconds to a minute, depending on your CPU. A smaller model (<code>tiny</code>) is faster. A larger one (<code>small</code>, <code>medium</code>) is more accurate.</p>
+<p><strong>Secrets are stored in a file, not the keychain.</strong> No OS keyring was found (common on headless Linux and in Docker). The file is readable only by your user account. On Linux desktops, install <code>gnome-keyring</code> or KWallet and restart ClipPilot.</p>
+<p><strong>Where are the logs?</strong> On the dashboard (live), and in the <code>logs</code> folder inside the data directory shown in <strong>Settings → About</strong>.</p>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auto mode &amp; staying safe · ClipPilot</title>
+<meta name="description" content="ClipPilot is a tool that runs on your computer with your accounts. You are responsible for:">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="guide-page">
+<header class="nav">
+  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
+  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
+  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+</header>
+<main class="guide-layout">
+  <aside class="guide-nav">
+    <h3>Setup guides</h3>
+    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" class="active">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
+  </aside>
+  <article class="prose">
+    <h1>Auto mode &amp; staying safe</h1>
+<h2>Who is responsible</h2>
+<p>ClipPilot is a tool that runs on your computer with your accounts. <strong>You</strong> are responsible for:</p>
+<ul>
+<li>having permission to repost each streamer's clips. Many streamers welcome clip channels; some don't. Ask, and keep a list.</li>
+<li>following the <strong>Twitch Terms of Service</strong> (<a href="https://www.twitch.tv/p/legal/terms-of-service/" target="_blank" rel="noopener">https://www.twitch.tv/p/legal/terms-of-service/</a>) and the <strong>YouTube Community Guidelines</strong> and policies, including the rules on <strong>reused content</strong> for monetisation (<a href="https://support.google.com/youtube/answer/1311392" target="_blank" rel="noopener">https://support.google.com/youtube/answer/1311392</a>).</li>
+<li>responding to takedown requests from creators.</li>
+</ul>
+<p>The first time you switch anything to Auto mode, ClipPilot asks you to confirm this.</p>
+<h2>Built-in guard rails</h2>
+<ul>
+<li><strong>Manual approval is the default.</strong> Nothing uploads until you approve it.</li>
+<li><strong>Approved streamers only</strong> (on by default in Auto mode): clips from streamers who aren't on your approved list, or on that category's allowlist, go to the review queue instead of being uploaded.</li>
+<li><strong>Rate limits:</strong> a minimum gap between any two uploads (default 20 minutes), a per-day cap, your chosen interval, quiet hours, and a "pause until" switch.</li>
+<li><strong>Quota aware:</strong> ClipPilot stops before YouTube's daily API quota runs out and resumes after the reset.</li>
+<li><strong>Credit is mandatory:</strong> every title or description, including your manual edits, keeps the streamer's name, a link to their channel, and a link to the original clip.</li>
+<li><strong>No near-duplicates:</strong> the same clip is never processed twice, and clips of the same moment or too similar to recent uploads are skipped.</li>
+</ul>
+<h2>Make uploads more than a repost</h2>
+<p>YouTube treats unedited re-uploads as <em>reused content</em>. ClipPilot's edits help: captions, the reframe, hook text, dead-air trimming and the flash-forward. Adding your own voice helps even more:</p>
+<ul>
+<li>the <strong>commentary</strong> line (on screen and in the description), editable per clip in the review queue</li>
+<li>an <strong>intro or outro</strong> clip (Settings → Layout), such as a 1-2 second branded sting or your own reaction</li>
+<li>picking clips with a clear story and writing your own title</li>
+</ul>
+<h2>Recommended settings for a new channel</h2>
+<ul>
+<li>Stay in Manual mode for the first week.</li>
+<li>2-4 uploads per day, interval of 2 hours or more, quiet hours overnight.</li>
+<li>Only add streamers you've asked to your approved list.</li>
+</ul>
+  </article>
+</main>
+<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+</body>
+</html>
