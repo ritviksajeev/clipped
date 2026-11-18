@@ -1,8 +1,8 @@
 import pytest
 
-from clippilot.models import FACECAM_PRESETS, CaptionStyle, HookSettings, ReframeSettings
-from clippilot.pipeline import audio, captions, ffmpeg, hooks, render
-from clippilot.pipeline.ffmpeg import MediaInfo
+from clipped.models import FACECAM_PRESETS, CaptionStyle, HookSettings, ReframeSettings
+from clipped.pipeline import audio, captions, ffmpeg, hooks, render
+from clipped.pipeline.ffmpeg import MediaInfo
 from tests.conftest import requires_ffmpeg
 
 LANDSCAPE = MediaInfo(duration=12, width=1920, height=1080, fps=30, has_audio=True)
@@ -53,7 +53,7 @@ def test_escape_filter_path_handles_windows_and_spaces():
 
 def test_filtergraph_has_one_trim_per_segment():
     plan = hooks.EditPlan([hooks.Segment(9, 11, "teaser"), hooks.Segment(1, 5), hooks.Segment(6, 12)], 12, 10)
-    from clippilot.models import RenderSettings
+    from clipped.models import RenderSettings
 
     graph = render.build_filtergraph(plan, LANDSCAPE, ReframeSettings(), RenderSettings(), "captions.ass", None,
                                      render.GraphInputs(has_audio=True, intro=True, outro=True))

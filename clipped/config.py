@@ -1,7 +1,7 @@
 """Paths and environment discovery.
 
-Everything ClipPilot stores lives under one per-user data directory on the
-user's own machine. Nothing is ever sent to a ClipPilot server (there is none).
+Everything clipped stores lives under one per-user data directory on the
+user's own machine. Nothing is ever sent to a clipped server (there is none).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-APP_NAME = "ClipPilot"
+APP_NAME = "clipped"
 APP_VERSION = "0.1.0"
 DEFAULT_PORT = 8000
 
@@ -30,7 +30,7 @@ def _bundle_root() -> Path:
 def package_dir() -> Path:
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        return Path(meipass) / "clippilot"
+        return Path(meipass) / "clipped"
     return Path(__file__).resolve().parent
 
 
@@ -48,7 +48,7 @@ def web_dir() -> Path:
 
 
 def data_dir() -> Path:
-    override = os.environ.get("CLIPPILOT_HOME")
+    override = os.environ.get("CLIPPED_HOME")
     base = Path(override).expanduser() if override else Path(user_data_dir(APP_NAME, appauthor=False))
     base.mkdir(parents=True, exist_ok=True)
     return base
@@ -61,7 +61,7 @@ def sub_dir(name: str) -> Path:
 
 
 def db_path() -> Path:
-    return data_dir() / "clippilot.sqlite3"
+    return data_dir() / "clipped.sqlite3"
 
 
 def work_dir() -> Path:
@@ -87,7 +87,7 @@ def uploads_dir() -> Path:
 
 def _candidate_bin_dirs() -> list[Path]:
     dirs: list[Path] = []
-    env = os.environ.get("CLIPPILOT_BIN_DIR")
+    env = os.environ.get("CLIPPED_BIN_DIR")
     if env:
         dirs.append(Path(env))
     dirs.append(_bundle_root() / "bin")
@@ -99,7 +99,7 @@ def _candidate_bin_dirs() -> list[Path]:
 @lru_cache(maxsize=None)
 def find_binary(name: str) -> str | None:
     """Locate ffmpeg/ffprobe: explicit env var, bundled bin/, then PATH."""
-    env = os.environ.get(f"CLIPPILOT_{name.upper()}")
+    env = os.environ.get(f"CLIPPED_{name.upper()}")
     if env and Path(env).exists():
         return env
     exe = name + (".exe" if os.name == "nt" else "")
@@ -115,6 +115,6 @@ def require_binary(name: str) -> str:
     if not path:
         raise RuntimeError(
             f"{name} was not found. Install ffmpeg (https://ffmpeg.org/download.html) "
-            f"or set CLIPPILOT_{name.upper()} to its full path."
+            f"or set CLIPPED_{name.upper()} to its full path."
         )
     return path

@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from clippilot.db import Database
-from clippilot.engine import Engine
-from clippilot.keystore import FileSecretBackend, KeyStore
-from clippilot.models import ClipInfo, GlobalSettings, RenderSettings
-from clippilot.pipeline.transcribe import StaticTranscriber
-from clippilot.services.youtube import UploadResult
+from clipped.db import Database
+from clipped.engine import Engine
+from clipped.keystore import FileSecretBackend, KeyStore
+from clipped.models import ClipInfo, GlobalSettings, RenderSettings
+from clipped.pipeline.transcribe import StaticTranscriber
+from clipped.services.youtube import UploadResult
 from tests import media
 
 

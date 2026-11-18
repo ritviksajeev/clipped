@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from clippilot.db import Database
-from clippilot.models import CategorySettings, ClipInfo, GlobalSettings
-from clippilot.services.quota import QuotaTracker
+from clipped.db import Database
+from clipped.models import CategorySettings, ClipInfo, GlobalSettings
+from clipped.services.quota import QuotaTracker
 
 
 def make_db(tmp_path):

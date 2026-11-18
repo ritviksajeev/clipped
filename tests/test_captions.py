@@ -1,8 +1,8 @@
 import re
 
-from clippilot.models import CaptionStyle
-from clippilot.pipeline import captions
-from clippilot.pipeline.transcribe import Word
+from clipped.models import CaptionStyle
+from clipped.pipeline import captions
+from clipped.pipeline.transcribe import Word
 
 
 def test_color_conversion():

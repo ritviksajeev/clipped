@@ -1,8 +1,8 @@
 import pytest
 
-from clippilot.models import HookSettings
-from clippilot.pipeline import audio, hooks
-from clippilot.pipeline.transcribe import Word
+from clipped.models import HookSettings
+from clipped.pipeline import audio, hooks
+from clipped.pipeline.transcribe import Word
 from tests import media
 
 KEYWORDS = ["no way", "clutch", "insane"]
@@ -86,7 +86,7 @@ def test_map_time_and_serialization(analysis, transcript):
 
 def test_plan_without_audio_analysis_uses_words():
     words = [Word(2.0, 2.5, "hi"), Word(2.6, 3.0, "there")]
-    from clippilot.pipeline.transcribe import Transcript
+    from clipped.pipeline.transcribe import Transcript
 
     plan = hooks.plan_edit(10.0, None, Transcript(words=words), HookSettings(mode="trim"), [])
     assert plan.duration == pytest.approx(10.0)  # no analysis -> treated as fully active

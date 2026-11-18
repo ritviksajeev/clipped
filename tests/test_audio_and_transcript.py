@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from clippilot.pipeline import audio
-from clippilot.pipeline.transcribe import (
+from clipped.pipeline import audio
+from clipped.pipeline.transcribe import (
     StaticTranscriber, Transcript, WhisperTranscriber, Word, clean_words, normalize_token,
 )
 from tests import media

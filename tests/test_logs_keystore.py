@@ -4,7 +4,7 @@ import stat
 
 import pytest
 
-from clippilot import keystore, logs
+from clipped import keystore, logs
 
 
 def test_redact_registered_secret_and_patterns():
@@ -21,7 +21,7 @@ def test_logging_pipeline_never_emits_secret():
     logs.register_secret("my-twitch-secret-xyz")
     buffer = logs.LiveLogBuffer()
     buffer.addFilter(logs.RedactingFilter())
-    logger = logging.getLogger("clippilot.test.redact")
+    logger = logging.getLogger("clipped.test.redact")
     logger.addHandler(buffer)
     logger.setLevel(logging.INFO)
     try:
@@ -77,6 +77,6 @@ def test_file_backend_is_owner_only(tmp_path):
 
 
 def test_env_override_for_docker(monkeypatch):
-    monkeypatch.setenv("CLIPPILOT_TWITCH_CLIENT_ID", "envclientid")
+    monkeypatch.setenv("CLIPPED_TWITCH_CLIENT_ID", "envclientid")
     store = keystore.KeyStore(MemoryBackend())
     assert store.get("twitch_client_id") == "envclientid"

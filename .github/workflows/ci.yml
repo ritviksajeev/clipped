@@ -15,7 +15,7 @@ jobs:
           cache: pip
       - name: Install ffmpeg (with libass)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Install ClipPilot
+      - name: Install clipped
         run: pip install -e ".[dev]"
       - name: Tests
         run: pytest -q

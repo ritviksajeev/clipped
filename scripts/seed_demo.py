@@ -1,7 +1,7 @@
 """Fill a throwaway data directory with demo data (for UI development and screenshots).
 
-    CLIPPILOT_HOME=/tmp/clippilot-demo python scripts/seed_demo.py
-    CLIPPILOT_HOME=/tmp/clippilot-demo clippilot serve
+    CLIPPED_HOME=/tmp/clipped-demo python scripts/seed_demo.py
+    CLIPPED_HOME=/tmp/clipped-demo clipped serve
 
 Uses a synthetic test clip and fake credentials. Never point this at your
 real data directory.
@@ -17,19 +17,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from clippilot import config  # noqa: E402
-from clippilot.db import Database  # noqa: E402
-from clippilot.engine import Engine  # noqa: E402
-from clippilot.keystore import KeyStore  # noqa: E402
-from clippilot.models import CategorySettings, ClipInfo, GlobalSettings  # noqa: E402
-from clippilot.pipeline.transcribe import StaticTranscriber  # noqa: E402
+from clipped import config  # noqa: E402
+from clipped.db import Database  # noqa: E402
+from clipped.engine import Engine  # noqa: E402
+from clipped.keystore import KeyStore  # noqa: E402
+from clipped.models import CategorySettings, ClipInfo, GlobalSettings  # noqa: E402
+from clipped.pipeline.transcribe import StaticTranscriber  # noqa: E402
 from tests import media  # noqa: E402
 
 
 def main() -> None:
-    if "CLIPPILOT_HOME" not in os.environ:
-        sys.exit("Set CLIPPILOT_HOME to a throwaway folder first.")
-    os.environ.setdefault("CLIPPILOT_SECRETS_FILE", str(config.data_dir() / "secrets.json"))
+    if "CLIPPED_HOME" not in os.environ:
+        sys.exit("Set CLIPPED_HOME to a throwaway folder first.")
+    os.environ.setdefault("CLIPPED_SECRETS_FILE", str(config.data_dir() / "secrets.json"))
     db = Database(config.db_path())
     store = KeyStore()
     for name, value in {"twitch_client_id": "demo-client-id", "twitch_client_secret": "demo-client-secret",
@@ -71,7 +71,7 @@ def main() -> None:
         if not item:
             print(f"could not render {cid}: {db.get_clip(cid)['skip_reason']}")
             continue
-        from clippilot.pipeline import metadata
+        from clipped.pipeline import metadata
 
         variants = [metadata.finalize(metadata.Variant.from_dict(v), row["clip"], gs.metadata, cat["settings"]["hashtags"])
                     for v in item["variants"]]

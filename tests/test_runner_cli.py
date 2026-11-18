@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from clippilot import cli
-from clippilot.models import ClipInfo, HookSettings, ReframeSettings
-from clippilot.pipeline import ffmpeg, runner
-from clippilot.pipeline.transcribe import StaticTranscriber
+from clipped import cli
+from clipped.models import ClipInfo, HookSettings, ReframeSettings
+from clipped.pipeline import ffmpeg, runner
+from clipped.pipeline.transcribe import StaticTranscriber
 from tests import media
 from tests.conftest import requires_ffmpeg
 

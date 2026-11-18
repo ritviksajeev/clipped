@@ -1,4 +1,4 @@
-// Tiny API client. Every state-changing request carries X-ClipPilot: 1,
+// Tiny API client. Every state-changing request carries X-Clipped: 1,
 // which the backend requires (blocks cross-site requests from other tabs).
 
 export class ApiError extends Error {
@@ -11,7 +11,7 @@ export class ApiError extends Error {
 
 async function request(method, path, body, isForm = false) {
   const opts = { method, headers: {} }
-  if (method !== 'GET') opts.headers['X-ClipPilot'] = '1'
+  if (method !== 'GET') opts.headers['X-Clipped'] = '1'
   if (body !== undefined) {
     if (isForm) opts.body = body
     else {

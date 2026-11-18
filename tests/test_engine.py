@@ -2,8 +2,8 @@ from datetime import timedelta
 
 import pytest
 
-from clippilot.engine import EngineError
-from clippilot.models import CategorySettings
+from clipped.engine import EngineError
+from clipped.models import CategorySettings
 from tests.conftest import requires_ffmpeg
 from tests.fakes import build_engine, make_clip
 

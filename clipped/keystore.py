@@ -23,7 +23,7 @@ from .logs import get_logger, register_secret
 
 log = get_logger("keystore")
 
-SERVICE = "ClipPilot"
+SERVICE = "clipped"
 
 SECRET_NAMES = {
     "twitch_client_id": "Twitch Client ID",
@@ -120,8 +120,8 @@ class KeyStore:
     def __init__(self, backend=None) -> None:
         if backend is not None:
             self.backend = backend
-        elif os.environ.get("CLIPPILOT_SECRETS_FILE") or not _os_keyring_usable():
-            path = Path(os.environ.get("CLIPPILOT_SECRETS_FILE") or (config.data_dir() / "secrets.json"))
+        elif os.environ.get("CLIPPED_SECRETS_FILE") or not _os_keyring_usable():
+            path = Path(os.environ.get("CLIPPED_SECRETS_FILE") or (config.data_dir() / "secrets.json"))
             self.backend = FileSecretBackend(path)
         else:
             self.backend = OSKeyringBackend()
@@ -136,7 +136,7 @@ class KeyStore:
 
     def get(self, name: str) -> str | None:
         self._check(name)
-        env_value = os.environ.get(f"CLIPPILOT_{name.upper()}")
+        env_value = os.environ.get(f"CLIPPED_{name.upper()}")
         value = env_value or self.backend.get(name)
         register_secret(value)
         return value

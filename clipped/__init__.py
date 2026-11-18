@@ -1,4 +1,4 @@
-"""ClipPilot - local-first Twitch clips to YouTube Shorts."""
+"""clipped - local-first Twitch clips to YouTube Shorts."""
 
 from .config import APP_VERSION as __version__
 

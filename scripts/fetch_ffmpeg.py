@@ -30,7 +30,7 @@ RIEDL = "https://ffmpeg.martin-riedl.de/redirect/latest/macos/{arch}/release/{to
 
 def fetch(url: str) -> bytes:
     print(f"downloading {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": "ClipPilot-build"})
+    req = urllib.request.Request(url, headers={"User-Agent": "clipped-build"})
     with urllib.request.urlopen(req, timeout=300) as resp:
         return resp.read()
 

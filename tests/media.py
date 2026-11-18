@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 
-from clippilot.pipeline import ffmpeg
-from clippilot.pipeline.audio import write_wav
-from clippilot.pipeline.transcribe import Transcript, Word
+from clipped.pipeline import ffmpeg
+from clipped.pipeline.audio import write_wav
+from clipped.pipeline.transcribe import Transcript, Word
 
 SR = 16000
 

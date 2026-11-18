@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 ClipPilot contributors
+Copyright (c) 2026 clipped contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Bundled third-party assets keep their own licenses:
-- Inter font (SIL Open Font License 1.1): clippilot/assets/licenses/Inter-OFL.txt
+- Inter font (SIL Open Font License 1.1): clipped/assets/licenses/Inter-OFL.txt
 - Desktop builds include ffmpeg (GPL builds from BtbN / Martin Riedl), see
   https://ffmpeg.org/legal.html

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import { Sticker } from '../fx/components.jsx'
 
 export function Field({ label, hint, children, wide }) {
   return (
@@ -18,7 +19,7 @@ export function Toggle({ checked, onChange, label, hint, disabled }) {
       <span className="track"><span className="thumb" /></span>
       <span>
         <span className="toggle-label">{label}</span>
-        {hint && <span className="field-hint block">{hint}</span>}
+        {hint && <span className="field-hint">{hint}</span>}
       </span>
     </label>
   )
@@ -73,16 +74,20 @@ export function TagInput({ value = [], onChange, placeholder, prefix = '' }) {
   )
 }
 
-export function Modal({ title, children, onClose, actions }) {
+export function Modal({ title, accent, children, onClose, actions }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose?.()
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    document.documentElement.classList.add('modal-open')
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.documentElement.classList.remove('modal-open')
+    }
   }, [onClose])
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()} data-lenis-prevent="">
+      <div className="modal glow" role="dialog" aria-modal="true" aria-label={`${title} ${accent || ''}`}>
+        <h2>{title}{accent && <> <span className="accent">{accent}</span></>}</h2>
         <div className="modal-body">{children}</div>
         <div className="modal-actions">{actions}</div>
       </div>
@@ -94,14 +99,14 @@ export function AutoWarning({ onAccept, onCancel }) {
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   return (
-    <Modal title="Before you turn on Auto mode" onClose={onCancel} actions={<>
+    <Modal title="Before you go" accent="auto." onClose={onCancel} actions={<>
       <button className="btn ghost" onClick={onCancel}>Cancel</button>
-      <button className="btn primary" disabled={!checked || busy} onClick={async () => {
+      <button className="btn shine" disabled={!checked || busy} data-magnetic="0.15" onClick={async () => {
         setBusy(true)
         try { await api.post('/api/settings/acknowledge-auto'); await onAccept() } finally { setBusy(false) }
-      }}>I understand, enable Auto mode</button>
+      }}>I understand, turn it on <span className="arrow">→</span></button>
     </>}>
-      <p>In Auto mode ClipPilot selects, renders and uploads clips to your channel <strong>without asking you first</strong>.</p>
+      <p>In Auto mode clipped picks, renders and uploads clips to your channel <b>without asking you first</b>.</p>
       <ul>
         <li>You are responsible for having permission from each streamer to repost their clips.</li>
         <li>You are responsible for following the Twitch Terms of Service and YouTube's Community Guidelines and policies, including the reused-content rules.</li>
@@ -110,23 +115,23 @@ export function AutoWarning({ onAccept, onCancel }) {
       </ul>
       <label className="check">
         <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-        I understand and accept responsibility for what ClipPilot uploads.
+        I understand and accept responsibility for what clipped uploads.
       </label>
-      <p className="muted small">You'll only see this once. Read more in <a href="#/guides/safety">Auto mode & staying safe</a>.</p>
+      <p className="field-hint">You'll only see this once. More in <a className="link" href="#/guides/safety">Auto mode & staying safe</a>.</p>
     </Modal>
   )
 }
 
 export function Bars({ rows, labelKey = 'key', valueKey = 'avg_views', format = (v) => v, empty = 'No data yet' }) {
-  if (!rows?.length) return <p className="muted">{empty}</p>
+  if (!rows?.length) return <p className="muted small">{empty}</p>
   const max = Math.max(...rows.map((r) => r[valueKey] || 0), 1)
   return (
     <div className="bars">
-      {rows.map((r) => (
-        <div className="bar-row" key={r[labelKey]}>
+      {rows.map((r, i) => (
+        <div className="bar-row" key={r[labelKey]} style={{ '--i': i }}>
           <span className="bar-label" title={r[labelKey]}>{r[labelKey]}</span>
-          <span className="bar-track"><span className="bar-fill" style={{ width: `${((r[valueKey] || 0) / max) * 100}%` }} /></span>
-          <span className="bar-value">{format(r[valueKey])}{r.n != null && <span className="muted small"> · {r.n}</span>}</span>
+          <span className="bar-track"><span className="bar-fill" style={{ width: `${Math.max(2, ((r[valueKey] || 0) / max) * 100)}%` }} /></span>
+          <span className="bar-value">{format(r[valueKey])}{r.n != null && <span className="faint"> · {r.n}</span>}</span>
         </div>
       ))}
     </div>
@@ -135,7 +140,8 @@ export function Bars({ rows, labelKey = 'key', valueKey = 'avg_views', format = 
 
 export function Empty({ title, children }) {
   return (
-    <div className="empty">
+    <div className="empty reveal">
+      <Sticker />
       <h3>{title}</h3>
       <div className="muted">{children}</div>
     </div>

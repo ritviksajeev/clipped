@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from clippilot.pipeline import download, thumbnail
+from clipped.pipeline import download, thumbnail
 from tests.conftest import requires_ffmpeg
 
 

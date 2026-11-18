@@ -4,10 +4,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from clippilot.models import (
+from clipped.models import (
     CategorySettings, ClipInfo, GlobalSettings, OptimizerSettings, QuietHours, ScheduleSettings, SelectionSettings,
 )
-from clippilot.optimizer import insights, learning, ranking, similarity, timing
+from clipped.optimizer import insights, learning, ranking, similarity, timing
 
 NOW = datetime(2026, 11, 18, 18, 0, tzinfo=timezone.utc)
 NY = ZoneInfo("America/New_York")

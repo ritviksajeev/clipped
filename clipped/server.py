@@ -29,11 +29,11 @@ def serve(host: str = "127.0.0.1", port: int = config.DEFAULT_PORT, open_browser
     from .api.app import create_app
 
     setup_logging(config.logs_dir())
-    host = os.environ.get("CLIPPILOT_HOST", host)
-    port = int(os.environ.get("CLIPPILOT_PORT", port))
+    host = os.environ.get("CLIPPED_HOST", host)
+    port = int(os.environ.get("CLIPPED_PORT", port))
     url = f"http://localhost:{port}"
     if not port_free(host, port):
-        log.warning("Port %d is busy - ClipPilot may already be running. Opening %s", port, url)
+        log.warning("Port %d is busy - clipped may already be running. Opening %s", port, url)
         if open_browser:
             webbrowser.open(url)
         return
@@ -42,5 +42,5 @@ def serve(host: str = "127.0.0.1", port: int = config.DEFAULT_PORT, open_browser
     app = create_app()
     if open_browser:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    log.info("ClipPilot %s running at %s (data: %s)", config.APP_VERSION, url, config.data_dir())
+    log.info("clipped %s running at %s (data: %s)", config.APP_VERSION, url, config.data_dir())
     uvicorn.run(app, host=host, port=port, log_config=None, access_log=False)

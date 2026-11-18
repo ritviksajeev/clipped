@@ -3,8 +3,8 @@ import json
 import httpx
 import pytest
 
-from clippilot.models import ClipInfo, MetadataSettings
-from clippilot.pipeline import metadata
+from clipped.models import ClipInfo, MetadataSettings
+from clipped.pipeline import metadata
 
 CLIP = ClipInfo(id="AbcClip", url="https://clips.twitch.tv/AbcClip", title="he actually hit the 1v4",
                 broadcaster_name="TenZ", broadcaster_login="tenz", game_name="VALORANT", view_count=1200,

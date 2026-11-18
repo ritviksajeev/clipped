@@ -125,7 +125,7 @@ class OAuthFlow:
             raise AuthError(f"Google refused the sign-in ({reason}): {message}", reason, resp.status_code)
         tokens = resp.json()
         if not tokens.get("refresh_token"):
-            raise AuthError("Google did not return a refresh token. Remove ClipPilot's access at "
+            raise AuthError("Google did not return a refresh token. Remove clipped's access at "
                             "myaccount.google.com/permissions and connect again.")
         register_secret(tokens.get("refresh_token"))
         register_secret(tokens.get("access_token"))

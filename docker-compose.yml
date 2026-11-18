@@ -1,14 +1,14 @@
 services:
-  clippilot:
+  clipped:
     build: .
-    image: clippilot:latest
-    container_name: clippilot
+    image: clipped:latest
+    container_name: clipped
     # Published on 127.0.0.1 only: the dashboard is not reachable from your network.
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - clippilot-data:/data
+      - clipped-data:/data
     restart: unless-stopped
 
 volumes:
-  clippilot-data:
+  clipped-data:

@@ -1,10 +1,10 @@
 # PyInstaller spec for the one-click desktop build (Windows, macOS, Linux).
 #
-#   1. cd frontend && npm ci && npm run build      (builds clippilot/web)
+#   1. cd frontend && npm ci && npm run build      (builds clipped/web)
 #   2. python scripts/fetch_ffmpeg.py              (puts ffmpeg + ffprobe in packaging/bin)
-#   3. pyinstaller packaging/clippilot.spec --noconfirm
+#   3. pyinstaller packaging/clipped.spec --noconfirm
 #
-# Output: dist/ClipPilot/  (a folder with the ClipPilot executable)
+# Output: dist/clipped/  (a folder with the clipped executable)
 # ruff: noqa
 import sys
 from pathlib import Path
@@ -15,13 +15,13 @@ ROOT = Path(SPECPATH).resolve().parent
 BIN = ROOT / "packaging" / "bin"
 
 datas = [
-    (str(ROOT / "clippilot" / "assets"), "clippilot/assets"),
+    (str(ROOT / "clipped" / "assets"), "clipped/assets"),
 ]
-web = ROOT / "clippilot" / "web"
+web = ROOT / "clipped" / "web"
 if (web / "index.html").exists():
-    datas.append((str(web), "clippilot/web"))
+    datas.append((str(web), "clipped/web"))
 else:
-    print("WARNING: clippilot/web is missing - run `npm run build` in frontend/ first")
+    print("WARNING: clipped/web is missing - run `npm run build` in frontend/ first")
 
 binaries = []
 if BIN.exists():
@@ -41,7 +41,7 @@ datas += collect_data_files("certifi")
 hiddenimports += collect_submodules("uvicorn")
 hiddenimports += collect_submodules("keyring.backends")
 hiddenimports += collect_submodules("yt_dlp.extractor")
-hiddenimports += collect_submodules("clippilot")
+hiddenimports += collect_submodules("clipped")
 hiddenimports += ["anthropic", "multipart", "python_multipart", "tzdata"]
 datas += collect_data_files("tzdata")
 
@@ -61,8 +61,8 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="ClipPilot",
+    name="clipped",
     console=True,  # the console window is how you see it running and how you quit it
     icon=str(icon) if icon.exists() else None,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="ClipPilot")
+coll = COLLECT(exe, a.binaries, a.datas, name="clipped")

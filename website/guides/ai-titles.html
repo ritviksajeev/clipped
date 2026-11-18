@@ -1,45 +1,75 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Optional: AI titles with your own Anthropic or OpenAI key · ClipPilot</title>
-<meta name="description" content="ClipPilot writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, add your own API key. You pa">
-<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#09090b"/>
+<title>Optional: AI titles with your own Anthropic or OpenAI key · clipped</title>
+<meta name="description" content="clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, add your own API key. You pay "/>
+<script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="../style.css?v=2"/>
 </head>
 <body class="guide-page">
-<header class="nav">
-  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
-  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
-  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+<div class="loader" aria-hidden="true"><div class="loader-brand">clipped</div></div>
+<header class="topbar">
+  <a href="../index.html" class="brand" data-transition aria-label="clipped home"><span data-sticker></span>clipped</a>
+  <div class="topbar-right">
+    <nav class="topnav" aria-label="Primary">
+      <a href="../index.html#pipeline" data-transition><span data-scramble>Features</span></a>
+      <a href="index.html" data-transition class="active"><span data-scramble>Guides</span></a>
+      <a href="https://github.com/ritviksajeev/clipped" target="_blank" rel="noopener"><span data-scramble>GitHub</span></a>
+    </nav>
+    <a class="pill-btn" href="../index.html#download" data-transition data-magnetic="0.2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Download</span></a>
+  </div>
 </header>
-<main class="guide-layout">
-  <aside class="guide-nav">
-    <h3>Setup guides</h3>
-    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" class="active">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
-  </aside>
-  <article class="prose">
-    <h1>Optional: AI titles with your own Anthropic or OpenAI key</h1>
-<p>ClipPilot writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, add your own API key. You pay the provider directly for what you use, usually a fraction of a cent per clip.</p>
-<p>Whichever generator you use, ClipPilot always adds the streamer credit, the channel link, the original clip link and <code>#Shorts</code> itself. A model can't drop them.</p>
+<main>
+  <section class="guide-hero">
+    <div class="wrap">
+      <div class="ph-top"><span><span class="dot"></span><a href="../index.html" data-transition>clipped</a> / <a href="index.html" data-transition>guides</a> / ai-titles</span><span>guide 04 of 07</span></div>
+      <h1 class="ph-title" data-split>Optional: AI titles with your own Anthropic or OpenAI key</h1>
+    </div>
+  </section>
+  <div class="wrap guide-layout">
+    <aside class="guide-nav reveal">
+      <h3>SETUP GUIDES</h3>
+      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition class="active">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
+    </aside>
+    <article class="prose glow reveal d1">
+      <h1>Optional: AI titles with your own Anthropic or OpenAI key</h1>
+<p>clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, add your own API key. You pay the provider directly for what you use, usually a fraction of a cent per clip.</p>
+<p>Whichever generator you use, clipped always adds the streamer credit, the channel link, the original clip link and <code>#Shorts</code> itself. A model can't drop them.</p>
 <h2>Anthropic (Claude)</h2>
 <ol>
 <li>Create an account at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">https://console.anthropic.com/</a> and add credit under <strong>Billing</strong>.</li>
-<li>Open <strong>API Keys</strong> → <strong>Create Key</strong>, name it <code>ClipPilot</code>, and copy the key (it starts with <code>sk-ant-</code>).</li>
-<li>In ClipPilot: <strong>Settings → Titles &amp; AI</strong>, paste it under <strong>Anthropic API key</strong>, set <strong>Title generator</strong> to <strong>Anthropic</strong>, and save.</li>
+<li>Open <strong>API Keys</strong> → <strong>Create Key</strong>, name it <code>clipped</code>, and copy the key (it starts with <code>sk-ant-</code>).</li>
+<li>In clipped: <strong>Settings → Titles &amp; AI</strong>, paste it under <strong>Anthropic API key</strong>, set <strong>Title generator</strong> to <strong>Anthropic</strong>, and save.</li>
 <li>The default model is <code>claude-opus-5-5</code>. For the cheapest option, set the model to <code>claude-haiku-5-5</code>.</li>
 </ol>
 <h2>OpenAI</h2>
 <ol>
 <li>Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">https://platform.openai.com/api-keys</a>.</li>
-<li>In ClipPilot paste it under <strong>OpenAI API key</strong>, set <strong>Title generator</strong> to <strong>OpenAI</strong>, and enter a model name your account can use.</li>
+<li>In clipped paste it under <strong>OpenAI API key</strong>, set <strong>Title generator</strong> to <strong>OpenAI</strong>, and enter a model name your account can use.</li>
 </ol>
 <h2>How variants work</h2>
-<p>For every clip ClipPilot writes 2-3 title <em>styles</em> (hype, question, descriptive, streamer-first). In the review queue you can pick one or edit it. In Auto mode the optimizer tracks which style earns the most views and retention on <strong>your</strong> channel and favours it, while still trying the others occasionally.</p>
-<p>If the provider is unreachable or the key is wrong, ClipPilot falls back to the free templates and notes it in the log.</p>
-  </article>
+<p>For every clip clipped writes 2-3 title <em>styles</em> (hype, question, descriptive, streamer-first). In the review queue you can pick one or edit it. In Auto mode the optimizer tracks which style earns the most views and retention on <strong>your</strong> channel and favours it, while still trying the others occasionally.</p>
+<p>If the provider is unreachable or the key is wrong, clipped falls back to the free templates and notes it in the log.</p>
+    </article>
+  </div>
 </main>
-<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+<footer class="site-footer" style="padding-top:70px;padding-bottom:110px">
+  <div class="wrap">
+    <div class="footer-bottom">
+      <span>© clipped · MIT · runs on your computer</span>
+      <a href="../index.html#download" data-transition>Download clipped ↗</a>
+      <a href="https://evzero.org" target="_blank" rel="noopener">Built by evzero ↗</a>
+    </div>
+  </div>
+</footer>
+<script src="../vendor/lenis.min.js?v=1.3.27"></script>
+<script src="../main.js?v=2"></script>
 </body>
 </html>

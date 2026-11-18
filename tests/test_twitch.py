@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
-from clippilot.services.twitch import TwitchAuthError, TwitchClient, TwitchError
+from clipped.services.twitch import TwitchAuthError, TwitchClient, TwitchError
 
 
 def helix_clip(i, views=100, **kw):

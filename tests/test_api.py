@@ -3,17 +3,17 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from clippilot.api.app import create_app
-from clippilot.models import CategorySettings
+from clipped.api.app import create_app
+from clipped.models import CategorySettings
 from tests.conftest import requires_ffmpeg
 from tests.fakes import build_engine, make_clip
 
-H = {"X-ClipPilot": "1"}
+H = {"X-Clipped": "1"}
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch, sample_clip):
-    monkeypatch.setenv("CLIPPILOT_ALLOW_ANY_MEDIA", "1")
+    monkeypatch.setenv("CLIPPED_ALLOW_ANY_MEDIA", "1")
     engine, db, store, twitch, yt, clock = build_engine(tmp_path, sample_clip)
     app = create_app(db=db, store=store, engine=engine, allowed_hosts={"testserver"}, autostart=False)
     with TestClient(app) as client:

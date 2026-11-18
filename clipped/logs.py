@@ -138,7 +138,7 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
     if log_dir is not None:
         handlers.append(
             logging.handlers.RotatingFileHandler(
-                str(log_dir / "clippilot.log"), maxBytes=2_000_000, backupCount=3, encoding="utf-8"
+                str(log_dir / "clipped.log"), maxBytes=2_000_000, backupCount=3, encoding="utf-8"
             )
         )
     for handler in handlers:
@@ -150,4 +150,4 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
 
 
 def get_logger(name: str) -> logging.Logger:
-    return logging.getLogger(f"clippilot.{name}")
+    return logging.getLogger(f"clipped.{name}")

@@ -1,34 +1,53 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Connect YouTube (Google Cloud setup) · ClipPilot</title>
-<meta name="description" content="ClipPilot uploads through the official YouTube Data API v3 and reads performance from the YouTube Analytics API, using an OAuth client that you create in your o">
-<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#09090b"/>
+<title>Connect YouTube (Google Cloud setup) · clipped</title>
+<meta name="description" content="clipped uploads through the official YouTube Data API v3 and reads performance from the YouTube Analytics API, using an OAuth client that you create in your own"/>
+<script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="../style.css?v=2"/>
 </head>
 <body class="guide-page">
-<header class="nav">
-  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
-  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
-  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+<div class="loader" aria-hidden="true"><div class="loader-brand">clipped</div></div>
+<header class="topbar">
+  <a href="../index.html" class="brand" data-transition aria-label="clipped home"><span data-sticker></span>clipped</a>
+  <div class="topbar-right">
+    <nav class="topnav" aria-label="Primary">
+      <a href="../index.html#pipeline" data-transition><span data-scramble>Features</span></a>
+      <a href="index.html" data-transition class="active"><span data-scramble>Guides</span></a>
+      <a href="https://github.com/ritviksajeev/clipped" target="_blank" rel="noopener"><span data-scramble>GitHub</span></a>
+    </nav>
+    <a class="pill-btn" href="../index.html#download" data-transition data-magnetic="0.2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Download</span></a>
+  </div>
 </header>
-<main class="guide-layout">
-  <aside class="guide-nav">
-    <h3>Setup guides</h3>
-    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html" class="active">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
-  </aside>
-  <article class="prose">
-    <h1>Connect YouTube (Google Cloud setup)</h1>
-<p>ClipPilot uploads through the official <strong>YouTube Data API v3</strong> and reads performance from the <strong>YouTube Analytics API</strong>, using an OAuth client that <strong>you</strong> create in your own Google Cloud project. It's free and takes about 10 minutes. Because the project is yours, Google will show an "unverified app" warning when you sign in. That's expected: you are the developer.</p>
+<main>
+  <section class="guide-hero">
+    <div class="wrap">
+      <div class="ph-top"><span><span class="dot"></span><a href="../index.html" data-transition>clipped</a> / <a href="index.html" data-transition>guides</a> / youtube</span><span>guide 03 of 07</span></div>
+      <h1 class="ph-title" data-split>Connect YouTube (Google Cloud setup)</h1>
+    </div>
+  </section>
+  <div class="wrap guide-layout">
+    <aside class="guide-nav reveal">
+      <h3>SETUP GUIDES</h3>
+      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition class="active">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition>Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
+    </aside>
+    <article class="prose glow reveal d1">
+      <h1>Connect YouTube (Google Cloud setup)</h1>
+<p>clipped uploads through the official <strong>YouTube Data API v3</strong> and reads performance from the <strong>YouTube Analytics API</strong>, using an OAuth client that <strong>you</strong> create in your own Google Cloud project. It's free and takes about 10 minutes. Because the project is yours, Google will show an "unverified app" warning when you sign in. That's expected: you are the developer.</p>
 <blockquote>
-<p><strong>Important: uploads may be private at first.</strong> YouTube locks videos uploaded through API projects that haven't passed YouTube's free API compliance audit to <strong>private</strong>. ClipPilot detects this and tells you. To publish publicly from the API, submit the audit form (step 7). Until then you can open each private video in YouTube Studio and switch it to Public yourself.</p>
+<p><strong>Important: uploads may be private at first.</strong> YouTube locks videos uploaded through API projects that haven't passed YouTube's free API compliance audit to <strong>private</strong>. clipped detects this and tells you. To publish publicly from the API, submit the audit form (step 7). Until then you can open each private video in YouTube Studio and switch it to Public yourself.</p>
 </blockquote>
 <h2>1. Create a Google Cloud project</h2>
 <ol>
 <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">https://console.cloud.google.com/</a> and sign in with the Google account that owns your YouTube channel.</li>
-<li>Click the project picker at the top, then <strong>New Project</strong>. Name it <code>ClipPilot</code> and click <strong>Create</strong>.</li>
+<li>Click the project picker at the top, then <strong>New Project</strong>. Name it <code>clipped</code> and click <strong>Create</strong>.</li>
 <li>Make sure the new project is selected in the picker.</li>
 </ol>
 <p>No billing account is needed.</p>
@@ -42,7 +61,7 @@
 <p>Google calls this area <strong>Google Auth Platform</strong> (older consoles say <strong>OAuth consent screen</strong>).</p>
 <ol>
 <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">https://console.cloud.google.com/auth/overview</a> and click <strong>Get started</strong>.</li>
-<li><strong>App information:</strong> app name <code>ClipPilot</code>, support email = your email.</li>
+<li><strong>App information:</strong> app name <code>clipped</code>, support email = your email.</li>
 <li><strong>Audience:</strong> choose <strong>External</strong>.</li>
 <li><strong>Contact information:</strong> your email. Agree to the policy and click <strong>Create</strong>.</li>
 <li>Open <strong>Audience</strong> and, under <strong>Test users</strong>, click <strong>Add users</strong> and add the Google account that owns your channel.</li>
@@ -53,18 +72,18 @@
 </ol>
 <p>Click <strong>Update</strong>, then <strong>Save</strong>.</p>
 <h3>Testing vs. In production</h3>
-<p>While the app is in <strong>Testing</strong>, Google expires your sign-in after <strong>7 days</strong> and ClipPilot will ask you to reconnect. To avoid that, open <strong>Audience</strong> and click <strong>Publish app</strong> → <strong>Confirm</strong>. The app stays unverified, which is fine for personal use (unverified apps are limited to 100 users). You do <strong>not</strong> need to submit it for Google verification.</p>
+<p>While the app is in <strong>Testing</strong>, Google expires your sign-in after <strong>7 days</strong> and clipped will ask you to reconnect. To avoid that, open <strong>Audience</strong> and click <strong>Publish app</strong> → <strong>Confirm</strong>. The app stays unverified, which is fine for personal use (unverified apps are limited to 100 users). You do <strong>not</strong> need to submit it for Google verification.</p>
 <h2>4. Create the OAuth client</h2>
 <ol>
 <li>Open <strong>Clients</strong> (or <strong>APIs &amp; Services → Credentials</strong>): <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">https://console.cloud.google.com/auth/clients</a>.</li>
 <li>Click <strong>Create client</strong>.</li>
-<li><strong>Application type: Desktop app</strong>. Name it <code>ClipPilot desktop</code> and click <strong>Create</strong>.</li>
+<li><strong>Application type: Desktop app</strong>. Name it <code>clipped desktop</code> and click <strong>Create</strong>.</li>
 <li>Click <strong>Download JSON</strong> (the file is named like <code>client_secret_….json</code>).</li>
 </ol>
-<p>A <em>Desktop app</em> client works with ClipPilot's local sign-in page on any port. If you choose <em>Web application</em> instead, add <code>http://localhost:8000/oauth2callback</code> as an authorized redirect URI.</p>
-<h2>5. Add the client to ClipPilot</h2>
+<p>A <em>Desktop app</em> client works with clipped's local sign-in page on any port. If you choose <em>Web application</em> instead, add <code>http://localhost:8000/oauth2callback</code> as an authorized redirect URI.</p>
+<h2>5. Add the client to clipped</h2>
 <ol>
-<li>In ClipPilot open <strong>Settings → YouTube</strong>.</li>
+<li>In clipped open <strong>Settings → YouTube</strong>.</li>
 <li>Either paste the whole downloaded JSON into <strong>Paste client JSON</strong>, or copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the two fields.</li>
 <li>Click <strong>Save</strong>.</li>
 </ol>
@@ -72,22 +91,33 @@
 <ol>
 <li>Click <strong>Connect YouTube</strong>. A Google sign-in tab opens.</li>
 <li>Pick the account that owns your channel.</li>
-<li>You'll see <strong>Google hasn't verified this app</strong>. Click <strong>Advanced</strong> → <strong>Go to ClipPilot (unsafe)</strong>. This is your own app.</li>
+<li>You'll see <strong>Google hasn't verified this app</strong>. Click <strong>Advanced</strong> → <strong>Go to clipped (unsafe)</strong>. This is your own app.</li>
 <li>Allow the requested permissions.</li>
-<li>You're sent back to ClipPilot and the channel name appears in Settings.</li>
+<li>You're sent back to clipped and the channel name appears in Settings.</li>
 </ol>
 <h2>7. Optional: pass the API audit so uploads can be public</h2>
 <ol>
 <li>Open the <strong>YouTube API Services Audit and Quota Extension Form</strong>: <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" rel="noopener">https://support.google.com/youtube/contact/yt_api_form</a>.</li>
-<li>Choose the audit option, describe ClipPilot as "a personal tool that uploads my own edited Shorts of Twitch clips with streamer credit", and list your project number (shown on the Cloud console dashboard).</li>
+<li>Choose the audit option, describe clipped as "a personal tool that uploads my own edited Shorts of Twitch clips with streamer credit", and list your project number (shown on the Cloud console dashboard).</li>
 <li>Google reviews it, which can take a few weeks. Once approved, uploads use the privacy you chose in Settings.</li>
 </ol>
 <h2>Quota</h2>
-<p>A new project gets <strong>10,000 units per day</strong>, reset at midnight Pacific time. One upload costs about 1,600 units (plus 50 for a custom thumbnail), so <strong>about 6 uploads per day</strong>. ClipPilot tracks this on the dashboard, stops before it runs out, and resumes after the reset. The same audit form can request more quota.</p>
+<p>A new project gets <strong>10,000 units per day</strong>, reset at midnight Pacific time. One upload costs about 1,600 units (plus 50 for a custom thumbnail), so <strong>about 6 uploads per day</strong>. clipped tracks this on the dashboard, stops before it runs out, and resumes after the reset. The same audit form can request more quota.</p>
 <h2>Custom thumbnails</h2>
-<p>YouTube only accepts custom thumbnails from <strong>phone-verified</strong> channels (<a href="https://www.youtube.com/verify" target="_blank" rel="noopener">https://www.youtube.com/verify</a>). If yours isn't verified, uploads still work and ClipPilot simply skips the thumbnail. Note that the Shorts feed itself usually shows a frame from the video rather than the custom thumbnail.</p>
-  </article>
+<p>YouTube only accepts custom thumbnails from <strong>phone-verified</strong> channels (<a href="https://www.youtube.com/verify" target="_blank" rel="noopener">https://www.youtube.com/verify</a>). If yours isn't verified, uploads still work and clipped simply skips the thumbnail. Note that the Shorts feed itself usually shows a frame from the video rather than the custom thumbnail.</p>
+    </article>
+  </div>
 </main>
-<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+<footer class="site-footer" style="padding-top:70px;padding-bottom:110px">
+  <div class="wrap">
+    <div class="footer-bottom">
+      <span>© clipped · MIT · runs on your computer</span>
+      <a href="../index.html#download" data-transition>Download clipped ↗</a>
+      <a href="https://evzero.org" target="_blank" rel="noopener">Built by evzero ↗</a>
+    </div>
+  </div>
+</footer>
+<script src="../vendor/lenis.min.js?v=1.3.27"></script>
+<script src="../main.js?v=2"></script>
 </body>
 </html>

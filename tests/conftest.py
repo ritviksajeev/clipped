@@ -15,10 +15,10 @@ HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 def isolated_home(tmp_path, monkeypatch):
     """Every test gets its own data dir and never touches the real OS keyring."""
     home = tmp_path / "home"
-    monkeypatch.setenv("CLIPPILOT_HOME", str(home))
-    monkeypatch.setenv("CLIPPILOT_SECRETS_FILE", str(home / "secrets.json"))
+    monkeypatch.setenv("CLIPPED_HOME", str(home))
+    monkeypatch.setenv("CLIPPED_SECRETS_FILE", str(home / "secrets.json"))
     for name in list(os.environ):
-        if name.startswith("CLIPPILOT_") and name.endswith(("_KEY", "_SECRET", "_TOKEN", "_CLIENT_ID")):
+        if name.startswith("CLIPPED_") and name.endswith(("_KEY", "_SECRET", "_TOKEN", "_CLIENT_ID")):
             monkeypatch.delenv(name, raising=False)
     yield home
 
@@ -49,7 +49,7 @@ def transcript():
 
 @pytest.fixture
 def small_render():
-    from clippilot.models import RenderSettings
+    from clipped.models import RenderSettings
 
     return RenderSettings(width=360, height=640, fps=15, crf=30, preset="ultrafast")
 

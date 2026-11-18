@@ -1,6 +1,6 @@
 """Local speech-to-text with word timestamps (faster-whisper).
 
-The whisper model is downloaded once from Hugging Face into the ClipPilot data
+The whisper model is downloaded once from Hugging Face into the clipped data
 directory on first use, then everything runs offline on the user's machine.
 """
 

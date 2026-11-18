@@ -1,5 +1,5 @@
 {
-  "name": "clippilot-dashboard",
+  "name": "clipped-dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,6 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/geist-sans": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "lenis": "^1.3.27",
     "marked": "^12.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

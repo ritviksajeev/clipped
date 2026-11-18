@@ -5,10 +5,10 @@ from datetime import date
 import httpx
 import pytest
 
-from clippilot.db import Database
-from clippilot.services import youtube
-from clippilot.services.quota import QuotaTracker
-from clippilot.services.youtube import (
+from clipped.db import Database
+from clipped.services import youtube
+from clipped.services.quota import QuotaTracker
+from clipped.services.youtube import (
     AuthError, OAuthFlow, PendingAuth, QuotaExceeded, UploadRequest, YouTubeClient, YouTubeError,
 )
 

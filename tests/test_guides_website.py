@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from clippilot import config
+from clipped import config
 
 ROOT = Path(__file__).resolve().parent.parent
 GUIDE_SLUGS = {"quick-start", "twitch", "youtube", "ai-titles", "ffmpeg", "safety", "troubleshooting"}

@@ -3,7 +3,7 @@
 **/__pycache__
 **/node_modules
 frontend/dist
-clippilot/web
+clipped/web
 packaging/bin
 build
 dist

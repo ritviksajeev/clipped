@@ -3,11 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark light" />
-    <title>ClipPilot</title>
+    <meta name="theme-color" content="#09090b" />
+    <title>clipped</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},6000)})(document);</script>
   </head>
   <body>
+    <!-- Curtain: covers the app while it loads (motion.js lifts it) -->
+    <div class="loader" aria-hidden="true">
+      <div class="loader-brand">clipped</div>
+      <div class="loader-welcome">
+        <span class="lw-word"><span class="lw-l" style="--i:0">c</span><span class="lw-l" style="--i:1">l</span><span class="lw-l" style="--i:2">i</span><span class="lw-l" style="--i:3">p</span><span class="lw-l" style="--i:4">p</span><span class="lw-l" style="--i:5">e</span><span class="lw-l" style="--i:6">d</span><span class="lw-dot"></span></span>
+        <span class="lw-sub">Twitch clips · captioned shorts · your machine</span>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

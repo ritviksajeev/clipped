@@ -7,9 +7,9 @@ build/
 dist/
 node_modules/
 frontend/dist/
-clippilot/web/
-.clippilot-dev/
+clipped/web/
+.clipped-dev/
 *.log
 .DS_Store
 packaging/bin/
-clippilot-output/
+clipped-output/

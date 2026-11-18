@@ -1,8 +1,8 @@
 import random
 from datetime import timedelta
 
-from clippilot.db import iso
-from clippilot.models import CategorySettings
+from clipped.db import iso
+from clipped.models import CategorySettings
 from tests.conftest import requires_ffmpeg
 from tests.fakes import build_engine, make_clip
 
@@ -16,7 +16,7 @@ def seed_history(db, clock, n=14, *, style_views=None, hour_bias=None, streamer=
     for i in range(n):
         style = styles[i % len(styles)]
         cid = f"hist{i}"
-        from clippilot.models import ClipInfo
+        from clipped.models import ClipInfo
 
         db.insert_clip(ClipInfo(id=cid, broadcaster_name=streamer), cat_id, status="processed")
         item = db.create_item(cid, cat_id, mode="auto", streamer=streamer, streamer_login=streamer)

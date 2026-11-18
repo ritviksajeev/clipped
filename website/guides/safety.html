@@ -1,45 +1,64 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auto mode &amp; staying safe · ClipPilot</title>
-<meta name="description" content="ClipPilot is a tool that runs on your computer with your accounts. You are responsible for:">
-<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#09090b"/>
+<title>Auto mode &amp; staying safe · clipped</title>
+<meta name="description" content="clipped is a tool that runs on your computer with your accounts. You are responsible for:"/>
+<script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="../style.css?v=2"/>
 </head>
 <body class="guide-page">
-<header class="nav">
-  <a class="logo" href="../index.html"><img src="../assets/favicon.svg" alt="" width="28" height="28"> ClipPilot</a>
-  <nav><a href="../index.html#features">Features</a><a href="index.html">Setup guides</a><a href="../index.html#download">Download</a>
-  <a href="https://github.com/ritviksajeev/clipped" rel="noopener">GitHub</a></nav>
+<div class="loader" aria-hidden="true"><div class="loader-brand">clipped</div></div>
+<header class="topbar">
+  <a href="../index.html" class="brand" data-transition aria-label="clipped home"><span data-sticker></span>clipped</a>
+  <div class="topbar-right">
+    <nav class="topnav" aria-label="Primary">
+      <a href="../index.html#pipeline" data-transition><span data-scramble>Features</span></a>
+      <a href="index.html" data-transition class="active"><span data-scramble>Guides</span></a>
+      <a href="https://github.com/ritviksajeev/clipped" target="_blank" rel="noopener"><span data-scramble>GitHub</span></a>
+    </nav>
+    <a class="pill-btn" href="../index.html#download" data-transition data-magnetic="0.2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Download</span></a>
+  </div>
 </header>
-<main class="guide-layout">
-  <aside class="guide-nav">
-    <h3>Setup guides</h3>
-    <nav><a href="quick-start.html">Quick start</a><a href="twitch.html">Get your Twitch Client ID and Secret</a><a href="youtube.html">Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html">Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" class="active">Auto mode &amp; staying safe</a><a href="troubleshooting.html">Troubleshooting</a></nav>
-  </aside>
-  <article class="prose">
-    <h1>Auto mode &amp; staying safe</h1>
+<main>
+  <section class="guide-hero">
+    <div class="wrap">
+      <div class="ph-top"><span><span class="dot"></span><a href="../index.html" data-transition>clipped</a> / <a href="index.html" data-transition>guides</a> / safety</span><span>guide 06 of 07</span></div>
+      <h1 class="ph-title" data-split>Auto mode &amp; staying safe</h1>
+    </div>
+  </section>
+  <div class="wrap guide-layout">
+    <aside class="guide-nav reveal">
+      <h3>SETUP GUIDES</h3>
+      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition>Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition class="active">Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
+    </aside>
+    <article class="prose glow reveal d1">
+      <h1>Auto mode &amp; staying safe</h1>
 <h2>Who is responsible</h2>
-<p>ClipPilot is a tool that runs on your computer with your accounts. <strong>You</strong> are responsible for:</p>
+<p>clipped is a tool that runs on your computer with your accounts. <strong>You</strong> are responsible for:</p>
 <ul>
 <li>having permission to repost each streamer's clips. Many streamers welcome clip channels; some don't. Ask, and keep a list.</li>
 <li>following the <strong>Twitch Terms of Service</strong> (<a href="https://www.twitch.tv/p/legal/terms-of-service/" target="_blank" rel="noopener">https://www.twitch.tv/p/legal/terms-of-service/</a>) and the <strong>YouTube Community Guidelines</strong> and policies, including the rules on <strong>reused content</strong> for monetisation (<a href="https://support.google.com/youtube/answer/1311392" target="_blank" rel="noopener">https://support.google.com/youtube/answer/1311392</a>).</li>
 <li>responding to takedown requests from creators.</li>
 </ul>
-<p>The first time you switch anything to Auto mode, ClipPilot asks you to confirm this.</p>
+<p>The first time you switch anything to Auto mode, clipped asks you to confirm this.</p>
 <h2>Built-in guard rails</h2>
 <ul>
 <li><strong>Manual approval is the default.</strong> Nothing uploads until you approve it.</li>
 <li><strong>Approved streamers only</strong> (on by default in Auto mode): clips from streamers who aren't on your approved list, or on that category's allowlist, go to the review queue instead of being uploaded.</li>
 <li><strong>Rate limits:</strong> a minimum gap between any two uploads (default 20 minutes), a per-day cap, your chosen interval, quiet hours, and a "pause until" switch.</li>
-<li><strong>Quota aware:</strong> ClipPilot stops before YouTube's daily API quota runs out and resumes after the reset.</li>
+<li><strong>Quota aware:</strong> clipped stops before YouTube's daily API quota runs out and resumes after the reset.</li>
 <li><strong>Credit is mandatory:</strong> every title or description, including your manual edits, keeps the streamer's name, a link to their channel, and a link to the original clip.</li>
 <li><strong>No near-duplicates:</strong> the same clip is never processed twice, and clips of the same moment or too similar to recent uploads are skipped.</li>
 </ul>
 <h2>Make uploads more than a repost</h2>
-<p>YouTube treats unedited re-uploads as <em>reused content</em>. ClipPilot's edits help: captions, the reframe, hook text, dead-air trimming and the flash-forward. Adding your own voice helps even more:</p>
+<p>YouTube treats unedited re-uploads as <em>reused content</em>. clipped's edits help: captions, the reframe, hook text, dead-air trimming and the flash-forward. Adding your own voice helps even more:</p>
 <ul>
 <li>the <strong>commentary</strong> line (on screen and in the description), editable per clip in the review queue</li>
 <li>an <strong>intro or outro</strong> clip (Settings → Layout), such as a 1-2 second branded sting or your own reaction</li>
@@ -51,8 +70,19 @@
 <li>2-4 uploads per day, interval of 2 hours or more, quiet hours overnight.</li>
 <li>Only add streamers you've asked to your approved list.</li>
 </ul>
-  </article>
+    </article>
+  </div>
 </main>
-<footer class="footer"><p>ClipPilot is free and open source (MIT). It runs on your computer: no accounts, no servers, no tracking.</p></footer>
+<footer class="site-footer" style="padding-top:70px;padding-bottom:110px">
+  <div class="wrap">
+    <div class="footer-bottom">
+      <span>© clipped · MIT · runs on your computer</span>
+      <a href="../index.html#download" data-transition>Download clipped ↗</a>
+      <a href="https://evzero.org" target="_blank" rel="noopener">Built by evzero ↗</a>
+    </div>
+  </div>
+</footer>
+<script src="../vendor/lenis.min.js?v=1.3.27"></script>
+<script src="../main.js?v=2"></script>
 </body>
 </html>

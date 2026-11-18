@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { api, fmtTime } from '../api.js'
 import { useApp } from '../App.jsx'
 import { AutoWarning, Empty, Field, NumberInput, Select, TagInput, Toggle } from '../components/ui.jsx'
+import { Kicker, PageHead } from '../fx/components.jsx'
 
 const PRESETS = {
   'top-left': { x: 0, y: 0, w: 0.26, h: 0.32 },
@@ -10,13 +11,14 @@ const PRESETS = {
   'bottom-right': { x: 0.74, y: 0.68, w: 0.26, h: 0.32 },
 }
 
-function Picker({ onAdd, existing }) {
+function Picker({ onAdd, existing, enabled }) {
   const { notify } = useApp()
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const timer = useRef(null)
   useEffect(() => {
+    if (!enabled) return
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       setLoading(true)
@@ -26,31 +28,33 @@ function Picker({ onAdd, existing }) {
       } finally { setLoading(false) }
     }, 300)
     return () => clearTimeout(timer.current)
-  }, [q])
+  }, [q, enabled])
   return (
-    <section className="card">
-      <h2>Add a category</h2>
-      <input className="search" placeholder="Search Twitch categories: Valorant, Counter-Strike, GTA, Fortnite…" value={q}
-        onChange={(e) => setQ(e.target.value)} autoFocus />
-      {loading && <div className="muted small">Searching…</div>}
+    <section className="card glow reveal">
+      <div className="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
+        <input className="search" placeholder="Search Twitch: Valorant, Counter-Strike, GTA, Fortnite…" value={q}
+          onChange={(e) => setQ(e.target.value)} disabled={!enabled} />
+      </div>
       <div className="cat-results">
-        {results.map((r) => {
+        {loading && <div className="label full-row">Searching…</div>}
+        {results.map((r, i) => {
           const added = existing.includes(r.id)
           return (
-            <button key={r.id} className="cat-result" disabled={added} onClick={() => onAdd(r)}>
+            <button key={r.id} className="cat-result glow" style={{ '--i': i }} disabled={added} onClick={() => onAdd(r)}>
               {r.box_art_url ? <img src={r.box_art_url} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} /> : <span className="noimg" />}
               <span>{r.name}</span>
-              <span className="muted small">{added ? 'added' : '+ add'}</span>
+              <span className="label">{added ? 'added' : '+ add'}</span>
             </button>
           )
         })}
-        {!loading && !results.length && <div className="muted small full-row">{q ? 'No matches.' : 'Type to search (needs your Twitch keys).'}</div>}
+        {!loading && !results.length && <div className="field-hint full-row">{!enabled ? 'Add your Twitch keys in Settings to search.' : q ? 'No matches.' : 'Type to search, or pick from the top categories once they load.'}</div>}
       </div>
     </section>
   )
 }
 
-function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck }) {
+function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck, index }) {
   const { notify } = useApp()
   const [s, setS] = useState(cat.settings)
   const [open, setOpen] = useState(false)
@@ -68,80 +72,87 @@ function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck }) {
       else notify(e.message, 'error')
     }
   }
+  const modeChip = s.mode === 'auto' ? 'live' : s.mode === 'manual' ? 'accent' : ''
   return (
-    <section className={`card category ${cat.enabled ? '' : 'disabled'}`}>
-      <div className="row between">
-        <div className="row gap">
+    <section className={`category glow reveal ${cat.enabled ? '' : 'disabled'}`} style={{ '--d': `${Math.min(index, 6) * 0.06}s` }}>
+      <div className="cat-head">
+        <div className="cat-title">
           {cat.box_art_url && <img className="boxart" src={cat.box_art_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none' }} />}
           <div>
             <h3>{cat.name}</h3>
-            <div className="muted small">
-              mode: <strong>{s.mode === 'inherit' ? 'same as global' : s.mode}</strong> · max {s.max_clips_per_day}/day ·
-              min {s.min_views} views · last {s.max_age_hours}h · {cat.uploads} uploaded · fetched {fmtTime(cat.last_fetch_at)}
+            <div className="cat-meta">
+              <span className={`chip ${modeChip}`}>{s.mode === 'inherit' ? 'global mode' : s.mode}</span>
+              <span className="chip">max {s.max_clips_per_day}/day</span>
+              <span className="chip">{s.min_views}+ views</span>
+              <span className="chip">last {s.max_age_hours}h</span>
+              <span className="chip">{cat.uploads} uploaded</span>
+              <span className="chip">fetched {fmtTime(cat.last_fetch_at)}</span>
             </div>
           </div>
         </div>
-        <div className="row gap">
-          <Toggle checked={cat.enabled} label="Enabled" onChange={async (v) => onSaved(await api.put(`/api/categories/${cat.id}`, { enabled: v }))} />
-          <button className="btn ghost small" onClick={async () => {
+        <div className="row">
+          <Toggle checked={cat.enabled} label={cat.enabled ? 'On' : 'Off'} onChange={async (v) => onSaved(await api.put(`/api/categories/${cat.id}`, { enabled: v }))} />
+          <button className="btn small ghost" onClick={async () => {
             try { await api.post(`/api/categories/${cat.id}/fetch`); notify(`Fetching ${cat.name}…`) } catch (e) { notify(e.message, 'error') }
           }}>Fetch now</button>
-          <button className="btn small" onClick={() => setOpen(!open)}>{open ? 'Close' : 'Settings'}</button>
+          <button className={`btn small ${open ? 'primary' : ''}`} onClick={() => setOpen(!open)}>{open ? 'Close' : 'Settings'}</button>
         </div>
       </div>
-      {open && (
-        <div className="cat-form">
-          <div className="grid3">
-            <Field label="Mode" hint="Overrides the global mode for this category">
-              <Select value={s.mode} onChange={(v) => {
-                if (v === 'auto' && !autoAcked) requestAck(() => setS((cur) => ({ ...cur, mode: 'auto' })))
-                else set('mode')(v)
-              }} options={[['inherit', 'Same as global'], ['manual', 'Manual approval'], ['auto', 'Auto']]} />
-            </Field>
-            <Field label="Minimum views"><NumberInput value={s.min_views} min={0} onChange={set('min_views')} /></Field>
-            <Field label="Clip age window (hours)"><NumberInput value={s.max_age_hours} min={1} max={720} onChange={set('max_age_hours')} /></Field>
-            <Field label="Language" hint="ISO code like en, es, pt. Blank = any.">
-              <input value={s.language} maxLength={5} onChange={(e) => set('language')(e.target.value.trim())} />
-            </Field>
-            <Field label="Max clips per day"><NumberInput value={s.max_clips_per_day} min={0} max={50} onChange={set('max_clips_per_day')} /></Field>
-          </div>
-          <Field label="Streamer allowlist" hint="If set, only these streamers are used. They also count as approved for Auto mode." wide>
-            <TagInput value={s.allowlist} onChange={set('allowlist')} placeholder="twitch login, Enter to add" />
-          </Field>
-          <Field label="Streamer blocklist" wide>
-            <TagInput value={s.blocklist} onChange={set('blocklist')} placeholder="never use these streamers" />
-          </Field>
-          <Field label="Hashtags" wide>
-            <TagInput value={s.hashtags} onChange={set('hashtags')} prefix="#" placeholder="#valorant #fps" />
-          </Field>
-          <Field label="Extra hype keywords" hint="Words that signal a great moment in this game (e.g. ace, clutch)" wide>
-            <TagInput value={s.keywords} onChange={set('keywords')} placeholder="ace, 1v5, clutch" />
-          </Field>
-          <Field label="Facecam positions (split layout per streamer)" wide
-            hint="Streamers listed here get a facecam-on-top / gameplay-below layout. Others use the global layout.">
-            <div className="facecams">
-              {Object.entries(s.facecams || {}).map(([login, rect]) => (
-                <span className="tag" key={login}>{login}: {Object.entries(PRESETS).find(([, p]) => JSON.stringify(p) === JSON.stringify(rect))?.[0] || 'custom'}
-                  <button onClick={() => { const n = { ...s.facecams }; delete n[login]; set('facecams')(n) }}>×</button></span>
-              ))}
-              <input placeholder="streamer login" value={fc.login} onChange={(e) => setFc({ ...fc, login: e.target.value })} />
-              <Select value={fc.preset} onChange={(v) => setFc({ ...fc, preset: v })} options={Object.keys(PRESETS)} />
-              <button className="btn small" type="button" disabled={!fc.login.trim()} onClick={() => {
-                set('facecams')({ ...(s.facecams || {}), [fc.login.trim().toLowerCase()]: PRESETS[fc.preset] })
-                setFc({ ...fc, login: '' })
-              }}>Add</button>
+      <div className={`collapse ${open ? 'open' : ''}`}>
+        <div>
+          <div className="cat-form">
+            <div className="grid3">
+              <Field label="Mode" hint="Overrides the global mode">
+                <Select value={s.mode} onChange={(v) => {
+                  if (v === 'auto' && !autoAcked) requestAck(() => setS((cur) => ({ ...cur, mode: 'auto' })))
+                  else set('mode')(v)
+                }} options={[['inherit', 'Same as global'], ['manual', 'Manual approval'], ['auto', 'Auto']]} />
+              </Field>
+              <Field label="Minimum views"><NumberInput value={s.min_views} min={0} onChange={set('min_views')} /></Field>
+              <Field label="Clip age window (hours)"><NumberInput value={s.max_age_hours} min={1} max={720} onChange={set('max_age_hours')} /></Field>
+              <Field label="Language" hint="ISO code like en, es, pt. Blank = any.">
+                <input value={s.language} maxLength={5} onChange={(e) => set('language')(e.target.value.trim())} />
+              </Field>
+              <Field label="Max clips per day"><NumberInput value={s.max_clips_per_day} min={0} max={50} onChange={set('max_clips_per_day')} /></Field>
             </div>
-          </Field>
-          <div className="row between">
-            <button className="btn danger ghost small" onClick={async () => {
-              if (!confirm(`Remove ${cat.name}? Already uploaded Shorts stay on YouTube.`)) return
-              await api.del(`/api/categories/${cat.id}`)
-              onDeleted(cat.id)
-            }}>Remove category</button>
-            <button className="btn primary" disabled={!dirty} onClick={() => save()}>Save</button>
+            <Field label="Streamer allowlist" hint="If set, only these streamers are used. They also count as approved for Auto mode.">
+              <TagInput value={s.allowlist} onChange={set('allowlist')} placeholder="twitch login, enter to add" />
+            </Field>
+            <Field label="Streamer blocklist">
+              <TagInput value={s.blocklist} onChange={set('blocklist')} placeholder="never use these streamers" />
+            </Field>
+            <Field label="Hashtags">
+              <TagInput value={s.hashtags} onChange={set('hashtags')} prefix="#" placeholder="#valorant #fps" />
+            </Field>
+            <Field label="Extra hype keywords" hint="Words that signal a great moment in this game (e.g. ace, clutch)">
+              <TagInput value={s.keywords} onChange={set('keywords')} placeholder="ace, 1v5, clutch" />
+            </Field>
+            <Field label="Facecam positions · split layout per streamer"
+              hint="Streamers listed here get facecam-on-top / gameplay-below. Everyone else uses the global layout.">
+              <div className="facecams">
+                {Object.entries(s.facecams || {}).map(([login, rect]) => (
+                  <span className="tag" key={login}>{login}: {Object.entries(PRESETS).find(([, p]) => JSON.stringify(p) === JSON.stringify(rect))?.[0] || 'custom'}
+                    <button type="button" onClick={() => { const n = { ...s.facecams }; delete n[login]; set('facecams')(n) }}>×</button></span>
+                ))}
+                <input placeholder="streamer login" value={fc.login} onChange={(e) => setFc({ ...fc, login: e.target.value })} />
+                <Select value={fc.preset} onChange={(v) => setFc({ ...fc, preset: v })} options={Object.keys(PRESETS)} />
+                <button className="btn small" type="button" disabled={!fc.login.trim()} onClick={() => {
+                  set('facecams')({ ...(s.facecams || {}), [fc.login.trim().toLowerCase()]: PRESETS[fc.preset] })
+                  setFc({ ...fc, login: '' })
+                }}>Add</button>
+              </div>
+            </Field>
+            <div className="row between" style={{ marginTop: 6 }}>
+              <button className="btn small ghost danger" onClick={async () => {
+                if (!confirm(`Remove ${cat.name}? Shorts already on YouTube stay there.`)) return
+                await api.del(`/api/categories/${cat.id}`)
+                onDeleted(cat.id)
+              }}>Remove category</button>
+              <button className="btn shine" disabled={!dirty} onClick={() => save()}>Save {cat.name} <span className="arrow">→</span></button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </section>
   )
 }
@@ -161,20 +172,19 @@ export default function Categories() {
   }
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Categories</h1>
-          <p className="muted">Pick the games and categories to pull clips from. Each one has its own filters.</p>
-        </div>
-      </header>
-      {!status?.twitch_configured && <div className="banner warn">Add your Twitch keys in <a href="#/settings">Settings</a> to search categories.</div>}
-      <Picker onAdd={add} existing={(cats || []).map((c) => c.twitch_id)} />
+      <PageHead crumb="categories" meta={`${cats?.length ?? 0} watching`} text="Pick your" accent="games."
+        lead="Search any Twitch category. Each one gets its own filters, hashtags, streamer lists and mode." />
+      {!status?.twitch_configured && <div className="banner warn">Add your Twitch keys in <a href="#/settings/connections">Settings</a> to search categories.</div>}
+      <Picker onAdd={add} existing={(cats || []).map((c) => c.twitch_id)} enabled={!!status?.twitch_configured} />
+      <Kicker idx={1} name="Watching" meta={`${(cats || []).filter((c) => c.enabled).length} enabled`} />
       {cats && cats.length === 0 && <Empty title="No categories yet">Search above and add one or more.</Empty>}
-      {(cats || []).map((c) => (
-        <CategoryEditor key={c.id} cat={c} autoAcked={autoAcked} requestAck={(then) => setAck(() => then)}
-          onSaved={(u) => setCats((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x)))}
-          onDeleted={(id) => setCats((list) => list.filter((x) => x.id !== id))} />
-      ))}
+      <div className="cards">
+        {(cats || []).map((c, i) => (
+          <CategoryEditor key={c.id} cat={c} index={i} autoAcked={autoAcked} requestAck={(then) => setAck(() => then)}
+            onSaved={(u) => setCats((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x)))}
+            onDeleted={(id) => setCats((list) => list.filter((x) => x.id !== id))} />
+        ))}
+      </div>
       {ack && <AutoWarning onCancel={() => setAck(null)} onAccept={async () => { const fn = ack; setAck(null); await fn() }} />}
     </div>
   )

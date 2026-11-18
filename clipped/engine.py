@@ -74,7 +74,7 @@ class Engine:
         self.last_error = ""
         self.auth_problem = ""
         self.upload_progress: dict[int, float] = {}
-        self._pools = {"net": ThreadPoolExecutor(1, "clippilot-net"), "render": ThreadPoolExecutor(1, "clippilot-render")}
+        self._pools = {"net": ThreadPoolExecutor(1, "clipped-net"), "render": ThreadPoolExecutor(1, "clipped-render")}
         self._futures: dict[str, Future | None] = {"net": None, "render": None}
         self._loop_task: asyncio.Task | None = None
         self._lock = threading.RLock()

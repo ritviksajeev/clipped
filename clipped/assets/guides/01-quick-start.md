@@ -1,6 +1,6 @@
 # Quick start
 
-ClipPilot runs entirely on your computer. It finds popular Twitch clips in the categories you pick, turns them into captioned vertical Shorts, and uploads them to **your** YouTube channel with **your** API keys. Nothing is sent to a ClipPilot server. There isn't one.
+clipped runs entirely on your computer. It finds popular Twitch clips in the categories you pick, turns them into captioned vertical Shorts, and uploads them to **your** YouTube channel with **your** API keys. Nothing is sent to a clipped server. There isn't one.
 
 ## What you need
 
@@ -14,11 +14,11 @@ ClipPilot runs entirely on your computer. It finds popular Twitch clips in the c
 
 ## Steps
 
-1. **Install and open ClipPilot.** The dashboard opens at <http://localhost:8000>. It is only reachable from your own computer.
+1. **Install and open clipped.** The dashboard opens at <http://localhost:8000>. It is only reachable from your own computer.
 2. **Twitch keys:** follow [Get your Twitch Client ID and Secret](#/guides/twitch), paste both into **Settings → Twitch**, and click **Test**.
 3. **YouTube:** follow [Connect YouTube (Google Cloud setup)](#/guides/youtube), then click **Connect YouTube** in Settings.
 4. **Pick categories:** in **Categories**, search for a game (Valorant, Counter-Strike, Fortnite, anything) and add it. Each category has its own minimum views, clip age window, language, daily limit, allowlist/blocklist and hashtags.
-5. **Press Start** on the dashboard. ClipPilot fetches clips, renders the best ones, and puts them in the **Review** queue.
+5. **Press Start** on the dashboard. clipped fetches clips, renders the best ones, and puts them in the **Review** queue.
 6. **Review:** watch each Short, edit the title, description, hashtags, hook text or thumbnail, then click **Approve**. Nothing is uploaded until you approve it.
 7. When you trust the results, you can switch categories (or everything) to **Auto mode**. Read [Auto mode & staying safe](#/guides/safety) first.
 

@@ -3,7 +3,7 @@
 Security for a localhost app:
 * binds to 127.0.0.1 by default (see server.py)
 * Host-header allowlist blocks DNS-rebinding attacks
-* every state-changing /api request must carry ``X-ClipPilot: 1`` (a custom
+* every state-changing /api request must carry ``X-Clipped: 1`` (a custom
   header other websites cannot send cross-origin without a CORS preflight,
   which we never grant) - this blocks CSRF from pages open in your browser
 * secrets are write-only through the API: only "set" + a masked hint come back
@@ -123,7 +123,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     store = store or KeyStore()
     engine = engine or Engine(db, store)
     hosts = set(allowed_hosts or DEFAULT_ALLOWED_HOSTS)
-    hosts |= {h.strip() for h in os.environ.get("CLIPPILOT_ALLOWED_HOSTS", "").split(",") if h.strip()}
+    hosts |= {h.strip() for h in os.environ.get("CLIPPED_ALLOWED_HOSTS", "").split(",") if h.strip()}
     pending_auth: dict[str, Any] = {}
 
     @asynccontextmanager
@@ -138,7 +138,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             await engine.stop()
         engine.shutdown()
 
-    app = FastAPI(title="ClipPilot", version=config.APP_VERSION, lifespan=lifespan, docs_url="/api/docs",
+    app = FastAPI(title="clipped", version=config.APP_VERSION, lifespan=lifespan, docs_url="/api/docs",
                   redoc_url=None, openapi_url="/api/openapi.json")
     app.state.db, app.state.store, app.state.engine = db, store, engine
 
@@ -149,8 +149,8 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         if hostname not in hosts:
             return JSONResponse({"detail": "Host not allowed"}, status_code=403)
         if request.method not in SAFE_METHODS and request.url.path.startswith("/api/"):
-            if request.headers.get("x-clippilot") != "1":
-                return JSONResponse({"detail": "Missing X-ClipPilot header"}, status_code=403)
+            if request.headers.get("x-clipped") != "1":
+                return JSONResponse({"detail": "Missing X-Clipped header"}, status_code=403)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -557,7 +557,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         if not item or not item[key] or not Path(item[key]).exists():
             raise HTTPException(404, "File not available")
         path = Path(item[key]).resolve()
-        if config.data_dir().resolve() not in path.parents and not os.environ.get("CLIPPILOT_ALLOW_ANY_MEDIA"):
+        if config.data_dir().resolve() not in path.parents and not os.environ.get("CLIPPED_ALLOW_ANY_MEDIA"):
             raise HTTPException(403, "Outside data directory")
         return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
@@ -633,7 +633,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         index = web / "index.html"
         if index.exists():
             return FileResponse(index, headers={"Cache-Control": "no-cache"})
-        return HTMLResponse("<h1>ClipPilot</h1><p>The API is running. The dashboard has not been built: "
+        return HTMLResponse("<h1>clipped</h1><p>The API is running. The dashboard has not been built: "
                             "run <code>npm install && npm run build</code> in <code>frontend/</code>.</p>"
                             "<p><a href='/api/docs'>API docs</a></p>")
 

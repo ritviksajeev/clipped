@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "clippilot"
+name = "clipped"
 version = "0.1.0"
 description = "Local-first Twitch clips to YouTube Shorts pipeline with burned-in captions."
 readme = "README.md"
@@ -28,13 +28,13 @@ dependencies = [
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "markdown>=3.5", "pyinstaller>=6.6"]
 
 [project.scripts]
-clippilot = "clippilot.cli:main"
+clipped = "clipped.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["clippilot*"]
+include = ["clipped*"]
 
 [tool.setuptools.package-data]
-clippilot = ["assets/**/*", "web/**/*"]
+clipped = ["assets/**/*", "web/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

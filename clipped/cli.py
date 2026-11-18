@@ -1,8 +1,8 @@
 """Command line interface.
 
-    clippilot process <clip-url-or-file>   # one clip end to end (no API keys needed)
-    clippilot serve                        # dashboard at http://localhost:8000
-    clippilot doctor                       # check ffmpeg, libass, keyring, whisper
+    clipped process <clip-url-or-file>   # one clip end to end (no API keys needed)
+    clipped serve                        # dashboard at http://localhost:8000
+    clipped doctor                       # check ffmpeg, libass, keyring, whisper
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def cmd_process(args: argparse.Namespace) -> int:
     else:
         transcriber = WhisperTranscriber(whisper.model_size, whisper.device, whisper.compute_type, config.models_dir())
 
-    out_dir = Path(args.out) if args.out else Path.cwd() / "clippilot-output" / clip.id
+    out_dir = Path(args.out) if args.out else Path.cwd() / "clipped-output" / clip.id
     result = runner.process_clip(clip, out_dir, transcriber, opts, source=source)
     v = result.variant
     summary = {
@@ -165,13 +165,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="clippilot", description="Twitch clips to captioned YouTube Shorts")
+    parser = argparse.ArgumentParser(prog="clipped", description="Twitch clips to captioned YouTube Shorts")
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command")
 
     p = sub.add_parser("process", help="process one clip end to end")
     p.add_argument("source", help="Twitch clip URL or a local video file")
-    p.add_argument("--out", help="output folder (default ./clippilot-output/<clip>)")
+    p.add_argument("--out", help="output folder (default ./clipped-output/<clip>)")
     p.add_argument("--title", help="clip title (for local files)")
     p.add_argument("--streamer", help="streamer display name (for local files)")
     p.add_argument("--streamer-login", help="streamer login, used for the channel link")
