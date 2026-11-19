@@ -23,10 +23,10 @@ dependencies = [
   "python-multipart>=0.0.9",
   "anthropic>=2.10",
   "tzdata>=2024.1",  # time-zone database for zoneinfo; Windows has none built in
-  # Native app window on macOS. Windows and Linux use an Edge/Chrome app window
-  # instead, which needs nothing extra (pywebview on Windows pulls in pythonnet,
-  # which does not install on every Python version).
-  "pywebview>=5.3; sys_platform == 'darwin'",
+  # The native app window (WebView2 on Windows, WebKit on macOS) and the
+  # Windows tray icon. Linux uses an Edge/Chrome app window instead.
+  "pywebview>=5.3; sys_platform == 'win32' or sys_platform == 'darwin'",
+  "pystray>=0.19; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

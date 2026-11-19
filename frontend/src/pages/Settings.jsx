@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api, isDesktop, openExternal } from '../api.js'
 import { useApp } from '../App.jsx'
-import { AutoWarning, Field, NumberInput, Select, TagInput, Toggle } from '../components/ui.jsx'
-import { PageHead } from '../fx/components.jsx'
+import { AutoWarning, Field, Loading, NumberInput, PageHead, Select, TagInput, Toggle } from '../components/ui.jsx'
+import { Sticker } from '../stickers.jsx'
 
 const SECTIONS = [
-  ['connections', 'Connections'], ['mode', 'Mode & schedule'], ['safety', 'Safety'], ['captions', 'Captions'],
-  ['layout', 'Layout & hooks'], ['titles', 'Titles & AI'], ['youtube', 'YouTube uploads'], ['advanced', 'Advanced'],
-  ['about', 'About'],
+  ['connections', 'Connections', 'key'], ['mode', 'Mode & schedule', 'dashboard'], ['safety', 'Safety', 'power'],
+  ['captions', 'Captions', 'review'], ['layout', 'Layout & hooks', 'clipped'], ['titles', 'Titles & AI', 'sparkle'],
+  ['youtube', 'YouTube uploads', 'history'], ['advanced', 'Advanced', 'settings'], ['about', 'About', 'guides'],
 ]
 const INTERVALS = [[30, '30 minutes'], [120, '2 hours'], [360, '6 hours'], [1440, '24 hours']]
 
@@ -78,7 +78,7 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
     if (await openExternal(r.url)) setWaiting('openrouter')
   })
 
-  if (!st) return <section className="card glow reveal d2"><div className="faint label">Checking AI connections…</div></section>
+  if (!st) return <section className="card glow"><div className="faint label">Checking AI connections…</div></section>
   const ready = { anthropic: st.anthropic.ready, openrouter: st.openrouter.connected, ollama: st.ollama.running }
   const status = {
     anthropic: st.anthropic.signed_in ? `signed in · ${st.anthropic.profile}` : st.anthropic.api_key ? 'API key saved' : st.anthropic.env ? 'key from environment' : 'not connected',
@@ -107,7 +107,7 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
     </>
   }
   return (
-    <section className="card glow reveal d2">
+    <section className="card glow">
       <div className="card-head"><h2>AI titles · optional</h2><a className="ulink" href="#/guides/ai-titles">Guide</a></div>
       <p className="field-hint" style={{ marginBottom: 16 }}>
         Connect an AI to write titles, or keep the free templates. {st.provider === 'template'
@@ -169,7 +169,7 @@ function Connections({ onProvider }) {
     const stop = setTimeout(() => setYtWaiting(false), 10 * 60 * 1000)
     return () => { clearInterval(t); clearTimeout(stop) }
   }, [ytWaiting])
-  if (!secrets) return <div className="faint label">Loading…</div>
+  if (!secrets) return <Loading />
   const s = secrets.secrets
   const storage = secrets.os_keyring ? 'Stored in your OS keychain.' : 'Stored in a file only your user account can read.'
   const connect = async () => {
@@ -180,7 +180,7 @@ function Connections({ onProvider }) {
   }
   return (
     <>
-      <section className="card glow reveal">
+      <section className="card glow">
         <div className="card-head"><h2>Twitch</h2><a className="ulink" href="#/guides/twitch">How to get these</a></div>
         <SecretField name="twitch_client_id" info={s.twitch_client_id} onSaved={load} storage={storage} placeholder="Client ID" />
         <SecretField name="twitch_client_secret" info={s.twitch_client_secret} onSaved={load} storage={storage} placeholder="Client Secret" />
@@ -189,7 +189,7 @@ function Connections({ onProvider }) {
         }}>Test Twitch</button>
       </section>
 
-      <section className="card glow reveal d1">
+      <section className="card glow">
         <div className="card-head"><h2>YouTube</h2><a className="ulink" href="#/guides/youtube">Step-by-step guide</a></div>
         <Field label="Paste client JSON" hint="The client_secret_….json you downloaded from Google Cloud (Desktop app client).">
           <textarea rows={3} value={json} onChange={(e) => setJson(e.target.value)} placeholder='{"installed":{"client_id":"…","client_secret":"…"}}' />
@@ -210,7 +210,7 @@ function Connections({ onProvider }) {
               <button className="btn small ghost danger" onClick={async () => { await api.post('/api/youtube/disconnect'); load(); refreshStatus() }}>Disconnect</button>
             </>
           ) : (
-            <button className="btn shine big" disabled={!yt?.client_configured} onClick={connect} data-magnetic="0.15">Connect YouTube <span className="arrow">→</span></button>
+            <button className="btn primary big" disabled={!yt?.client_configured} onClick={connect}>Connect YouTube <span className="arrow">→</span></button>
           )}
           {ytWaiting && <span className="chip wip">Finish signing in in your browser…</span>}
         </div>
@@ -252,9 +252,9 @@ function CaptionPreview({ c }) {
   )
 }
 
-function Section({ title, children, d = 0, aside }) {
+function Section({ title, children, aside }) {
   return (
-    <section className={`card glow reveal d${d}`}>
+    <section className="card glow">
       <div className="card-head"><h2>{title}</h2>{aside}</div>
       {children}
     </section>
@@ -276,7 +276,7 @@ export default function Settings() {
     api.get('/api/about').then(setAbout).catch(() => {})
   }, [])
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(saved), [data, saved])
-  if (!data) return <div className="faint label">Loading…</div>
+  if (!data) return <Loading />
 
   const upd = (path, value) => {
     setData((prev) => {
@@ -308,14 +308,20 @@ export default function Settings() {
   const isCustom = !INTERVALS.some(([v]) => v === sched.upload_interval_minutes)
 
   return (
-    <div className="page">
-      <PageHead crumb={`settings / ${sectionLabel.toLowerCase()}`} meta={dirty ? 'unsaved changes' : 'all saved'} text="Tune" accent="it."
-        lead="Keys, schedule, safety rules, caption style and everything else. Changes apply to the next clip." />
-      <div className="settings-layout">
-        <nav className="subnav reveal">
-          {SECTIONS.map(([k, l]) => <a key={k} href={`#/settings/${k}`} className={section === k ? 'active' : ''}><span data-scramble="">{l}</span></a>)}
+    <div className="page fill">
+      <PageHead idx={6} crumb={`settings / ${sectionLabel.toLowerCase()}`} title="Tune" accent="it."
+        lead="Keys, schedule, safety rules, caption style and everything else. Changes apply to the next clip.">
+        <span className={`chip ${dirty ? 'wip' : ''}`}>{dirty ? 'unsaved changes' : 'all saved'}</span>
+      </PageHead>
+      <div className="side-layout">
+        <nav className="subnav pane">
+          {SECTIONS.map(([k, l, stk], i) => (
+            <a key={k} href={`#/settings/${k}`} className={section === k ? 'active' : ''} style={{ '--r': `${i % 2 ? 5 : -5}deg` }}>
+              <span className="subnav-stk"><Sticker name={stk} /></span><span>{l}</span>
+            </a>
+          ))}
         </nav>
-        <div className="settings-body" key={section}>
+        <div className="settings-body pane" key={section}>
           {section === 'connections' && <Connections onProvider={syncProvider} />}
 
           {section === 'mode' && <>
@@ -524,7 +530,7 @@ export default function Settings() {
               <dt>ffmpeg</dt><dd>{about.ffmpeg || 'not found'} {about.libass ? <span className="chip live">libass</span> : <span className="chip bad">libass missing</span>}</dd>
               <dt>Secrets</dt><dd>{about.secret_storage}</dd>
               <dt>Network</dt><dd>Bound to this computer only. There are no clipped servers; nothing is sent anywhere except Twitch, Google and the AI provider you pick.</dd>
-            </dl> : <div className="faint label">Loading…</div>}
+            </dl> : <Loading />}
           </Section>}
         </div>
       </div>

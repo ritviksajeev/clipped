@@ -45,11 +45,17 @@ hiddenimports += collect_submodules("keyring.backends")
 hiddenimports += collect_submodules("yt_dlp.extractor")
 hiddenimports += collect_submodules("clipped")
 hiddenimports += ["anthropic", "multipart", "python_multipart", "tzdata"]
-if sys.platform == "darwin":
-    d, b, h = collect_all("webview")  # native window on macOS
-    datas += d
-    binaries += b
-    hiddenimports += h
+if sys.platform in ("win32", "darwin"):
+    # The native app window (pywebview) and, on Windows, its .NET bridge and the tray icon.
+    for pkg in ("webview", "pythonnet", "clr_loader", "pystray") if sys.platform == "win32" else ("webview",):
+        try:
+            d, b, h = collect_all(pkg)
+        except Exception as exc:  # a missing optional package only drops that feature
+            print(f"WARNING: could not collect {pkg}: {exc}")
+            continue
+        datas += d
+        binaries += b
+        hiddenimports += h
 datas += collect_data_files("tzdata")
 
 def analysis(script):

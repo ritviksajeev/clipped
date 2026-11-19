@@ -3,15 +3,17 @@
 ``clipped`` (no arguments) or ``clipped app`` starts the local server in the
 background and opens the dashboard in an app window:
 
-* **app** (default on Windows and Linux): Microsoft Edge, Chrome, Brave or
-  Chromium in app mode. A plain window with no address bar or tabs, using its
-  own profile under the clipped data folder. Edge ships with Windows 10/11, so
-  nothing extra is installed.
-* **native** (default on macOS when pywebview is installed): a native window.
+* **native** (default on Windows and macOS): a frameless native window
+  (WebView2 / WebKit through pywebview). clipped draws its own title bar with
+  minimise, maximise and close. While the engine is running, closing the
+  window keeps clipped in the system tray (Windows) so uploads continue.
+* **app**: Microsoft Edge, Chrome, Brave or Chromium in app mode, a plain
+  window with no address bar or tabs. The fallback when no native window can
+  be made, and the default on Linux.
 * **browser**: a normal browser tab, as a last resort.
 
-Closing the window quits clipped. The page sends a heartbeat every few
-seconds (with a per-launch token), and the server shuts down shortly after the
+Outside the native window, closing the window quits clipped: the page sends a
+heartbeat (with a per-launch token) and the server shuts down shortly after the
 window says goodbye or stops checking in.
 """
 
@@ -52,6 +54,7 @@ class AppSession:
         self.last_seen: float | None = None
         self.bye_at: float | None = None
         self.away_until: float | None = None
+        self.on_show = None  # set by the native window: bring it back from the tray
         self._lock = threading.Lock()
 
     def ping(self, token: str, *, bye: bool = False, away: bool = False) -> bool:
@@ -132,7 +135,7 @@ def native_available() -> bool:
 def choose_window(requested: str = "auto") -> str:
     if requested != "auto":
         return requested
-    if sys.platform == "darwin" and native_available():
+    if sys.platform in ("win32", "darwin") and native_available():
         return "native"
     if find_app_browser():
         return "app"
@@ -180,6 +183,17 @@ def existing_instance(port: int) -> bool:
         return False
 
 
+def ask_to_show(port: int) -> bool:
+    """Ask a running clipped to bring its (maybe tray-hidden) window back."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/app/show", method="POST", data=b"",
+                                     headers={"X-Clipped": "1"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def find_port(host: str, start: int, tries: int = 20) -> int:
     from .server import port_free
 
@@ -191,8 +205,41 @@ def find_port(host: str, start: int, tries: int = 20) -> int:
 
 # --------------------------------------------------------------------------- windows
 
+def window_state_path() -> Path:
+    return config.data_dir() / "window.json"
+
+
+def load_window_state() -> dict:
+    try:
+        data = json.loads(window_state_path().read_text("utf-8"))
+        w, h = int(data["width"]), int(data["height"])
+        state = {"width": max(980, min(w, 4000)), "height": max(640, min(h, 3000))}
+        if isinstance(data.get("x"), int) and isinstance(data.get("y"), int) and data["x"] > -200 and data["y"] > -50:
+            state.update(x=data["x"], y=data["y"])
+        return state
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"width": WINDOW_SIZE[0], "height": WINDOW_SIZE[1]}
+
+
+def save_window_state(win) -> None:
+    try:
+        state = {"width": int(win.width), "height": int(win.height), "x": int(win.x), "y": int(win.y)}
+        window_state_path().write_text(json.dumps(state), "utf-8")
+    except Exception:  # best effort: a missing size is not worth an error
+        pass
+
+
 class _Bridge:
-    """Exposed to the page as window.pywebview.api (native window only)."""
+    """Exposed to the page as window.pywebview.api (native window only).
+
+    Attributes start with an underscore so pywebview does not expose them to
+    the page as well.
+    """
+
+    def __init__(self, on_close) -> None:
+        self._window = None
+        self._maximized = False
+        self._on_close = on_close
 
     def open_url(self, url: str) -> bool:
         if isinstance(url, str) and url.startswith("https://"):
@@ -200,13 +247,133 @@ class _Bridge:
             return True
         return False
 
+    def window_control(self, action: str) -> bool:
+        win = self._window
+        if win is None:
+            return False
+        if action == "minimize":
+            win.minimize()
+        elif action == "toggle_maximize":
+            if self._maximized:
+                win.restore()
+            else:
+                win.maximize()
+            self._maximized = not self._maximized
+        elif action == "close":
+            # Let this bridge call answer the page first: destroying the window
+            # inside the call leaves pywebview waiting forever for its reply.
+            timer = threading.Timer(0.05, self._on_close)
+            timer.daemon = True
+            timer.start()
+        else:
+            return False
+        return True
 
-def run_native(url: str) -> None:
+
+class Tray:
+    """System-tray icon (Windows), so clipped can keep uploading with its window closed."""
+
+    def __init__(self, on_show, on_quit) -> None:
+        self.icon = None
+        self.notified = False
+        if sys.platform != "win32":
+            return
+        try:
+            import pystray
+            from PIL import Image
+
+            image = Image.open(config.assets_dir() / "icon.png")
+            menu = pystray.Menu(
+                pystray.MenuItem("Open clipped", lambda *_: on_show(), default=True),
+                pystray.MenuItem("Quit clipped", lambda *_: on_quit()),
+            )
+            self.icon = pystray.Icon("clipped", image, "clipped", menu)
+            self.icon.run_detached()
+        except Exception as exc:  # no tray: closing the window simply quits
+            log.info("No system tray (%s)", exc)
+            self.icon = None
+
+    @property
+    def available(self) -> bool:
+        return self.icon is not None
+
+    def notify_once(self) -> None:
+        if self.icon is None or self.notified:
+            return
+        self.notified = True
+        try:
+            self.icon.notify("clipped is still running, so uploads keep going. Open or quit it from the tray icon.",
+                             "clipped is in the tray")
+        except Exception:
+            pass
+
+    def stop(self) -> None:
+        if self.icon is not None:
+            try:
+                self.icon.stop()
+            except Exception:
+                pass
+
+
+def run_native(url: str, session: "AppSession | None" = None, keep_running=lambda: False) -> None:
+    """Frameless native window. Blocks until clipped quits."""
     import webview
 
-    webview.create_window("clipped", url, width=WINDOW_SIZE[0], height=WINDOW_SIZE[1], min_size=(900, 640),
-                          background_color="#09090b", js_api=_Bridge())
-    webview.start()  # blocks until the window is closed
+    webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True  # title-bar buttons click instead of dragging
+    state = {"quitting": False}
+    win_ref: dict = {}
+
+    def quit_app() -> None:
+        state["quitting"] = True
+        tray.stop()
+        win = win_ref.get("win")
+        if win is not None:
+            save_window_state(win)
+            win.destroy()
+
+    def show() -> None:
+        win = win_ref.get("win")
+        if win is not None:
+            win.show()
+            win.restore()
+
+    def request_close() -> None:
+        # Engine running + tray available: hide instead of quitting, like any
+        # app that works in the background. Otherwise quit.
+        if keep_running() and tray.available:
+            win_ref["win"].hide()
+            tray.notify_once()
+        else:
+            quit_app()
+
+    def on_closing() -> bool:
+        if state["quitting"]:
+            return True
+        if keep_running() and tray.available:
+            threading.Thread(target=win_ref["win"].hide, daemon=True).start()
+            tray.notify_once()
+            return False  # cancel: stay in the tray
+        state["quitting"] = True
+        tray.stop()
+        save_window_state(win_ref["win"])
+        return True
+
+    tray = Tray(on_show=show, on_quit=quit_app)
+    bridge = _Bridge(on_close=request_close)
+    geometry = load_window_state()
+    win = webview.create_window(
+        "clipped", url, min_size=(980, 640), frameless=True, easy_drag=False, background_color="#09090b",
+        js_api=bridge, **geometry,
+    )
+    bridge._window = win
+    win_ref["win"] = win
+    win.events.closing += on_closing
+    if session is not None:
+        session.on_show = show
+    try:
+        webview.start()  # blocks until the window is destroyed
+    finally:
+        tray.stop()
 
 
 def open_app_window(url: str) -> subprocess.Popen | None:
@@ -248,9 +415,12 @@ def run_app(port: int = config.DEFAULT_PORT, window: str = "auto", host: str = "
 
     port = int(os.environ.get("CLIPPED_PORT", port))
     if existing_instance(port):
+        if ask_to_show(port):
+            log.info("clipped is already running; brought its window to the front")
+            return 0
         log.info("clipped is already running; opening another window")
         url = f"http://127.0.0.1:{port}/"
-        if choose_window(window) == "app" and open_app_window(url):
+        if choose_window(window) != "browser" and open_app_window(url):
             return 0
         webbrowser.open(url)
         return 0
@@ -266,7 +436,7 @@ def run_app(port: int = config.DEFAULT_PORT, window: str = "auto", host: str = "
     try:
         if mode == "native":
             try:
-                run_native(url)
+                run_native(url, session, keep_running=lambda: bool(app.state.engine.running))
                 return 0
             except Exception as exc:  # no GUI backend available: fall back
                 log.warning("Native window unavailable (%s); using an app window", exc)
@@ -281,7 +451,22 @@ def run_app(port: int = config.DEFAULT_PORT, window: str = "auto", host: str = "
         log.info("Shutting down")
     finally:
         server.stop()
+        _exit_soon()
     return 0
+
+
+def _exit_soon(grace: float = 5.0) -> None:
+    """Safety net: once clipped has shut down, don't let a stray non-daemon
+    thread (a GUI toolkit's, say) keep an invisible process alive."""
+    def bail() -> None:
+        import logging
+
+        logging.shutdown()
+        os._exit(0)
+
+    timer = threading.Timer(grace, bail)
+    timer.daemon = True
+    timer.start()
 
 
 # --------------------------------------------------------------------------- shortcuts

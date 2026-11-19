@@ -1,6 +1,43 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { Sticker } from '../fx/components.jsx'
+import { useCountUp } from '../fx.js'
+import { Sticker } from '../stickers.jsx'
+
+// Page header, app-sized: crumb + title with the site's serif accent, a short
+// lead, and room for actions on the right.
+export function PageHead({ idx, crumb, title, accent, lead, children, sticker }) {
+  return (
+    <header className="ph">
+      <div className="ph-text">
+        <div className="ph-crumb"><span className="dot" />({String(idx).padStart(2, '0')}) {crumb}</div>
+        <h1 className="ph-title">{title}{accent && <> <span className="serif accent">{accent}</span></>}</h1>
+        {lead && <p className="ph-lead">{lead}</p>}
+      </div>
+      <div className="ph-side">
+        {children}
+        {sticker && <span className="ph-stk" aria-hidden="true"><Sticker name={sticker} /></span>}
+      </div>
+    </header>
+  )
+}
+
+// Section divider from the site: (01) NAME ───────── meta
+export function Kicker({ idx, name, meta, children }) {
+  return (
+    <div className="kicker">
+      <span className="k-idx">({String(idx).padStart(2, '0')})</span>
+      <span className="k-name">{name}</span>
+      <span className="k-line" />
+      {meta && <span className="k-meta">{meta}</span>}
+      {children}
+    </div>
+  )
+}
+
+export function Count({ value, format = (v) => Math.round(v).toLocaleString() }) {
+  const shown = useCountUp(value)
+  return <>{format(shown)}</>
+}
 
 export function Field({ label, hint, children, wide }) {
   return (
@@ -17,10 +54,10 @@ export function Toggle({ checked, onChange, label, hint, disabled }) {
     <label className={`toggle ${disabled ? 'disabled' : ''}`}>
       <input type="checkbox" checked={!!checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="track"><span className="thumb" /></span>
-      <span>
-        <span className="toggle-label">{label}</span>
+      {(label || hint) && <span>
+        {label && <span className="toggle-label">{label}</span>}
         {hint && <span className="field-hint">{hint}</span>}
-      </span>
+      </span>}
     </label>
   )
 }
@@ -74,20 +111,30 @@ export function TagInput({ value = [], onChange, placeholder, prefix = '' }) {
   )
 }
 
-export function Modal({ title, accent, children, onClose, actions }) {
+export function Tabs({ tabs, value, onChange }) {
+  return (
+    <div className="tabs" role="tablist">
+      {tabs.map(([key, label, count]) => (
+        <button key={key} role="tab" aria-selected={value === key} className={value === key ? 'active' : ''} onClick={() => onChange(key)}>
+          <span data-scramble="">{label}</span>
+          {count > 0 && <span className="badge">{count}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function Modal({ title, accent, sticker, children, onClose, actions }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose?.()
     window.addEventListener('keydown', onKey)
-    document.documentElement.classList.add('modal-open')
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.documentElement.classList.remove('modal-open')
-    }
+    return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()} data-lenis-prevent="">
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className="modal glow" role="dialog" aria-modal="true" aria-label={`${title} ${accent || ''}`}>
-        <h2>{title}{accent && <> <span className="accent">{accent}</span></>}</h2>
+        {sticker && <span className="modal-stk" aria-hidden="true"><Sticker name={sticker} /></span>}
+        <h2>{title}{accent && <> <span className="serif accent">{accent}</span></>}</h2>
         <div className="modal-body">{children}</div>
         <div className="modal-actions">{actions}</div>
       </div>
@@ -99,9 +146,9 @@ export function AutoWarning({ onAccept, onCancel }) {
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   return (
-    <Modal title="Before you go" accent="auto." onClose={onCancel} actions={<>
+    <Modal title="Before you go" accent="auto." sticker="power" onClose={onCancel} actions={<>
       <button className="btn ghost" onClick={onCancel}>Cancel</button>
-      <button className="btn shine" disabled={!checked || busy} data-magnetic="0.15" onClick={async () => {
+      <button className="btn primary" disabled={!checked || busy} onClick={async () => {
         setBusy(true)
         try { await api.post('/api/settings/acknowledge-auto'); await onAccept() } finally { setBusy(false) }
       }}>I understand, turn it on <span className="arrow">→</span></button>
@@ -138,12 +185,16 @@ export function Bars({ rows, labelKey = 'key', valueKey = 'avg_views', format = 
   )
 }
 
-export function Empty({ title, children }) {
+export function Empty({ title, sticker = 'empty', children }) {
   return (
-    <div className="empty reveal">
-      <Sticker />
+    <div className="empty">
+      <span className="empty-stk" aria-hidden="true"><Sticker name={sticker} /></span>
       <h3>{title}</h3>
       <div className="muted">{children}</div>
     </div>
   )
+}
+
+export function Loading({ label = 'Loading' }) {
+  return <div className="loading"><span className="dot" />{label}…</div>
 }

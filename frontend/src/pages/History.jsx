@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { api, fmtDuration, fmtNum, fmtTime } from '../api.js'
 import { useApp } from '../App.jsx'
-import { Empty } from '../components/ui.jsx'
-import { PageHead } from '../fx/components.jsx'
+import { Empty, Loading, PageHead } from '../components/ui.jsx'
 
 export default function History() {
   const { notify, status } = useApp()
@@ -12,16 +11,16 @@ export default function History() {
 
   return (
     <div className="page">
-      <PageHead crumb="history" meta={`${rows?.length ?? 0} uploads`} text="Upload" accent="log."
-        lead="Every Short that went up, with live views and retention pulled from the YouTube Data and Analytics APIs every six hours.">
-        <button className="btn" data-magnetic="0.15" onClick={async () => {
+      <PageHead idx={4} crumb="history" title="Upload" accent="log."
+        lead="Every Short that went up, with views and retention from YouTube, refreshed every six hours.">
+        <button className="btn small" onClick={async () => {
           try { await api.post('/api/youtube/refresh-stats'); notify('Refreshing stats…'); setTimeout(load, 5000) } catch (e) { notify(e.message, 'error') }
-        }}>Refresh stats now <span className="arrow">↻</span></button>
+        }}>Refresh stats <span className="arrow">↻</span></button>
       </PageHead>
-      {rows === null ? <div className="faint label">Loading…</div> : rows.length === 0 ? (
-        <Empty title="Nothing uploaded yet">Approved clips appear here once they're live on YouTube.</Empty>
+      {rows === null ? <Loading /> : rows.length === 0 ? (
+        <Empty title="Nothing uploaded yet" sticker="history">Approved clips appear here once they're live on YouTube.</Empty>
       ) : (
-        <div className="table-wrap glow reveal" data-lenis-prevent="">
+        <div className="table-wrap card glow">
           <table className="table">
             <thead>
               <tr><th></th><th>Title</th><th>Streamer</th><th>Uploaded</th><th>Privacy</th><th className="num">Views</th><th className="num">Retention</th><th className="num">Likes</th><th>Style</th></tr>
@@ -34,7 +33,7 @@ export default function History() {
                   <tr key={r.id}>
                     <td>{r.thumbnail_url ? <img className="mini-thumb" src={r.thumbnail_url} alt="" /> : null}</td>
                     <td className="title-cell">
-                      <a href={r.youtube_url} target="_blank" rel="noreferrer" data-cursor-label="Watch">{r.title}</a>
+                      <a href={r.youtube_url} target="_blank" rel="noreferrer">{r.title}</a>
                       <div className="q-meta" style={{ marginTop: 4 }}>{r.category_name} · {fmtDuration(r.duration)} · {r.mode}</div>
                     </td>
                     <td>{r.streamer}</td>

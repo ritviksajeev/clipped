@@ -8,7 +8,7 @@ It runs on **your computer** with **your own API keys**. There is no clipped ser
 
 ## Features
 
-* **A real desktop app:** double-click and clipped opens in its own window (no browser tab). Close the window to quit. `clipped shortcut` adds it to your Desktop and Start Menu.
+* **A real desktop app:** clipped opens in its own frameless window with its own title bar, a sticker rail for navigation, panes that scroll on their own and a status bar (engine state, next-upload countdown, quota). The **Menu** button opens a full-window sticker picker, and `Ctrl+1`–`7` jumps between pages. While the engine runs, closing the window keeps clipped in the system tray so uploads continue. `clipped shortcut` adds it to your Desktop and Start Menu.
 * **Any Twitch category**, such as Valorant, CS2, GTA, Fortnite or Just Chatting. Search and add as many as you like, each with its own minimum views, discovery mode, language, daily limit, streamer allowlist/blocklist, hashtags and manual/auto mode.
 * **Trending now or top of the last 24h:** pick how clips are found, globally or per category. *Trending* takes clips from the last few hours that are gaining views fastest right now (view counts are re-checked on every fetch, so a clip that starts blowing up jumps the queue). *Top 24h* takes the most-viewed clips created in the last 24 hours.
 * **Full pipeline per clip:** fetch top clips → dedupe (never the same clip twice, nor the same moment clipped by someone else) → download (yt-dlp) → transcribe locally (faster-whisper, word timestamps) → **burned-in captions** (always on: word-level, large bold text, current word highlighted with a pop animation, configurable font/colours/position, kept inside the Shorts safe area) → reframe to 9:16 (blurred-background fill, facecam/gameplay split, or centre crop) → hook → title/description/hashtags → thumbnail → upload.
@@ -19,7 +19,7 @@ It runs on **your computer** with **your own API keys**. There is no clipped ser
 * **Learns from your channel:** stores views and retention for every upload (YouTube Data + Analytics APIs), learns which title style works (Thompson sampling) and which posting hours perform best, then favours them. It also spreads uploads across streamers and categories. A **"What's working"** page shows the results.
 * **Dashboard:** big Start/Stop, status, next-upload countdown, live logs, review queue, upload history with YouTube links and stats, and YouTube API quota usage with automatic backoff and pause-until-reset.
 * **Safety:** a one-time responsibility notice before Auto mode, "approved streamers only" for Auto mode (on by default), rate limits, and optional intro/outro/commentary so uploads aren't pure reposts.
-* **Looks the part:** the dashboard and website share the evzero design language: ink black, warm off-white and one iris accent, Geist / Geist Mono / Instrument Serif type, a welcome curtain, per-letter blur-in titles, cursor-lit glow cards, a warp star field behind the Start button, magnetic buttons, smooth scrolling and a status dock. Everything respects `prefers-reduced-motion`, and fonts are bundled so the local app never calls a font CDN.
+* **Looks the part:** evzero's design language shaped into an app: ink black, warm off-white and one iris accent, Geist / Geist Mono / Instrument Serif, die-cut stickers for every section (a rail down the side and a full-window sticker picker like evzero.org's menu), cursor-lit glow cards, box art as stickers, and the engine state written like a burned-in caption. Everything respects `prefers-reduced-motion`, and fonts are bundled so the app never calls a font CDN.
 * **Private by design:** keys live in the OS keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service), are never logged (a redaction filter scrubs every log line), and are never returned by the local API. The dashboard binds to `127.0.0.1` and rejects cross-site requests.
 
 ## Install
@@ -35,7 +35,7 @@ Download the latest build from the [Releases page](https://github.com/ritviksaje
 | macOS Intel | `clipped-macos-x64.zip` | same as above |
 | Linux x64 | `clipped-linux-x64.tar.gz` | `./clipped/clipped` |
 
-clipped opens in its own window. On Windows that is a Microsoft Edge app window (Edge ships with Windows, so nothing else is installed); on macOS a native window; on Linux a Chrome/Chromium/Edge app window, or a browser tab if none is installed. Keep it open while clipped works (auto uploads happen while it runs); close it to quit. `clipped-cli` is the same program with a console, for `clipped-cli doctor` and the other commands below.
+clipped opens in its own native window (WebView2 on Windows, WebKit on macOS); on Linux it uses a Chrome/Chromium/Edge app window, or a browser tab if none is installed. If the native window can't start, Windows falls back to a Microsoft Edge app window. Closing the window quits clipped, unless the engine is running: then it keeps going in the system tray (right-click the tray icon to quit). `clipped-cli` is the same program with a console, for `clipped-cli doctor` and the other commands below.
 
 ### Docker
 
@@ -173,7 +173,7 @@ clipped is a tool. You are responsible for having permission to repost streamers
 ```
 clipped/
   cli.py             command line (app / process / serve / doctor / shortcut)
-  desktop.py         app window (Edge/Chrome app mode or pywebview), heartbeat, shortcuts
+  desktop.py         native frameless window (pywebview) + tray, Edge/Chrome app-mode fallback, shortcuts
   server.py          uvicorn launcher (localhost only)
   api/app.py         FastAPI routes + security middleware + serves the dashboard
   engine.py          Start/Stop engine: fetch → render → schedule → upload → stats
@@ -185,7 +185,7 @@ clipped/
   optimizer/         ranking, similarity, learning (bandit, hours, diversity), timing, insights
   services/          twitch.py, youtube.py, quota.py, ai.py (one-click AI connections)
   assets/            fonts (Inter, OFL) and setup guides (Markdown)
-frontend/            React + Vite dashboard (builds into clipped/web); src/fx/ holds the motion layer
+frontend/            React + Vite app UI (builds into clipped/web); src/stickers.jsx holds the sticker set, src/fx.js the motion
 website/             static landing page + setup guides (GitHub Pages / Netlify)
 packaging/           PyInstaller spec + launcher
 scripts/             fetch_ffmpeg.py, build_website.py, seed_demo.py

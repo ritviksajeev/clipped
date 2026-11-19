@@ -8,13 +8,12 @@ import '@fontsource/geist-mono/400.css'
 import '@fontsource/geist-mono/500.css'
 import '@fontsource/instrument-serif/400.css'
 import '@fontsource/instrument-serif/400-italic.css'
-import '@fontsource/inter/900.css' // caption preview only (matches the burned-in caption font)
-import 'lenis/dist/lenis.css'
+import '@fontsource/inter/900.css' // captions: the engine state and the caption preview use the burned-in font
 import './styles.css'
 import App from './App.jsx'
-import { bootMotion } from './fx/motion.js'
+import { bootFx } from './fx.js'
 import { startAppHeartbeat } from './api.js'
 
 createRoot(document.getElementById('root')).render(<App />)
-bootMotion()
+bootFx()
 startAppHeartbeat()

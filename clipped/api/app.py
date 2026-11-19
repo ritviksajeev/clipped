@@ -201,6 +201,14 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             raise HTTPException(404, "Not found")
         return {"ok": True}
 
+    @app.post("/api/app/show")
+    def app_show():
+        # A second launch asks the running app to come back from the tray.
+        if app_session is None or not getattr(app_session, "on_show", None):
+            raise HTTPException(404, "No app window")
+        app_session.on_show()
+        return {"shown": True}
+
     # ------------------------------------------------------------------ status & engine
     @app.get("/api/status")
     def status():

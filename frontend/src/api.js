@@ -122,3 +122,10 @@ export async function openExternal(url) {
   window.location.href = url
   return Boolean(APP_TOKEN)
 }
+
+// The native window (pywebview, frameless): clipped draws its own title bar,
+// so minimise / maximise / close go through the Python bridge.
+export const hasNativeWindow = () => Boolean(window.pywebview?.api?.window_control)
+export function windowControl(action) {
+  try { return window.pywebview?.api?.window_control?.(action) } catch { return null }
+}

@@ -20,6 +20,7 @@ IMPORT_TO_DIST = {
     "PIL": "pillow",
     "multipart": "python-multipart",
     "webview": "pywebview",
+    "pystray": "pystray",
 }
 # provided by a declared package's own dependencies
 TRANSITIVE = {"starlette": "fastapi", "anyio": "fastapi"}

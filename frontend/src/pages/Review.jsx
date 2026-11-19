@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, fmtDuration, fmtNum, fmtTime } from '../api.js'
 import { useApp } from '../App.jsx'
-import { Empty, Field, Select } from '../components/ui.jsx'
-import { PageHead } from '../fx/components.jsx'
+import { Empty, Field, Loading, PageHead, Select, Tabs } from '../components/ui.jsx'
 
 const TABS = [
   ['review', 'Needs review'],
@@ -10,6 +9,7 @@ const TABS = [
   ['failed', 'Failed'],
   ['rejected', 'Rejected'],
 ]
+const TAB_PARAM = { scheduled: 'approved,ready,uploading', failed: 'failed', rejected: 'rejected' }
 const STYLE_LABEL = { hype: 'Hype', question: 'Question', descriptive: 'Descriptive', streamer: 'Streamer first' }
 
 function hashtagsFrom(description) {
@@ -90,12 +90,12 @@ function Editor({ item, onChanged, onRemoved }) {
 
   const a = item.analysis || {}
   return (
-    <div className="editor glow reveal" key={item.id}>
+    <div className="editor" key={item.id}>
       <div className="preview-col">
         <div className="phone-wrap">
           {item.video_url
             ? <video key={item.video_url + frameKey} className="phone" src={item.video_url} controls playsInline preload="metadata"
-              poster={item.thumbnail_url} data-cursor-label="Play" />
+              poster={item.thumbnail_url} />
             : <div className="phone placeholder">No video yet</div>}
         </div>
         <dl className="meta-list">
@@ -115,7 +115,7 @@ function Editor({ item, onChanged, onRemoved }) {
           <div className="variants">
             <span className="field-label">Title variants</span>
             {item.variants.map((v, i) => (
-              <button key={i} type="button" className={`variant glow ${item.chosen === i ? 'chosen' : ''}`}
+              <button key={i} type="button" className={`variant ${item.chosen === i ? 'chosen' : ''}`}
                 disabled={!editable || !!busy} onClick={() => chooseVariant(i)}>
                 <span className={`chip ${item.chosen === i ? 'accent' : ''}`}>{STYLE_LABEL[v.style] || v.style}{v.source !== 'template' ? ` · ${v.source}` : ''}</span>
                 <span>{v.title}</span>
@@ -127,7 +127,7 @@ function Editor({ item, onChanged, onRemoved }) {
           <input value={form.title} onChange={set('title')} disabled={!editable} />
         </Field>
         <Field label="Description" hint="The streamer credit and both links are always kept, even if you delete them here.">
-          <textarea rows={8} value={form.description} onChange={set('description')} disabled={!editable} data-lenis-prevent="" />
+          <textarea rows={7} value={form.description} onChange={set('description')} disabled={!editable} />
         </Field>
         <Field label="Hashtags" hint="Space separated. #Shorts is always included.">
           <input value={form.hashtags} onChange={set('hashtags')} disabled={!editable} />
@@ -153,17 +153,17 @@ function Editor({ item, onChanged, onRemoved }) {
         {(renderDirty || item.needs_rerender) && editable && <div className="banner warn small" style={{ marginBottom: 6 }}>Hook, thumbnail or commentary changed. Re-render to update the video (approving re-renders automatically).</div>}
         <div className="actions">
           {item.status === 'review' && <>
-            <button className="btn shine" disabled={!!busy} onClick={() => approve(false)} data-magnetic="0.15">
+            <button className="btn primary" disabled={!!busy} onClick={() => approve(false)}>
               {busy === 'approve' ? 'Approving…' : 'Approve'} <span className="arrow">→</span>
             </button>
             <button className="btn" disabled={!!busy} onClick={() => approve(true)}>Approve + upload now</button>
           </>}
-          {['approved', 'ready'].includes(item.status) && <button className="btn shine" disabled={!!busy} onClick={() => run('upload', async () => {
+          {['approved', 'ready'].includes(item.status) && <button className="btn primary" disabled={!!busy} onClick={() => run('upload', async () => {
             if (dirty) await save()
             await api.post(`/api/items/${item.id}/upload-now`)
             notify('Uploading now')
           })}>Upload now <span className="arrow">→</span></button>}
-          {editable && dirty && <button className="btn primary" disabled={!!busy} onClick={() => run('save', async () => { await save(); notify('Saved') })}>Save edits</button>}
+          {editable && dirty && <button className="btn" disabled={!!busy} onClick={() => run('save', async () => { await save(); notify('Saved') })}>Save edits</button>}
           {editable && <button className="btn ghost" disabled={!!busy} onClick={rerender}>{busy === 'rerender' ? 'Re-rendering…' : 'Re-render'}</button>}
           {['failed', 'rejected'].includes(item.status) && <button className="btn" disabled={!!busy} onClick={retry}>Retry</button>}
           {['review', 'approved', 'ready', 'failed'].includes(item.status) && <button className="btn ghost danger" disabled={!!busy} onClick={reject}>Reject</button>}
@@ -180,7 +180,7 @@ function AddClip({ onAdded }) {
   const [cat, setCat] = useState('')
   useEffect(() => { api.get('/api/categories').then(setCats).catch(() => {}) }, [])
   return (
-    <form className="add-clip reveal d3" onSubmit={async (e) => {
+    <form className="add-clip" onSubmit={async (e) => {
       e.preventDefault()
       try {
         await api.post('/api/clips', { url, category_id: cat ? Number(cat) : null })
@@ -189,16 +189,16 @@ function AddClip({ onAdded }) {
         onAdded?.()
       } catch (err) { notify(err.message, 'error') }
     }}>
-      <input placeholder="Paste a Twitch clip URL to process it by hand" value={url} onChange={(e) => setUrl(e.target.value)} />
+      <input placeholder="Paste a Twitch clip URL to make a Short from it" value={url} onChange={(e) => setUrl(e.target.value)} />
       <Select value={cat} onChange={setCat} options={[['', 'No category'], ...cats.map((c) => [String(c.id), c.name])]} />
-      <button className="btn primary" disabled={!url}>Add clip</button>
+      <button className="btn" disabled={!url}>Add clip</button>
     </form>
   )
 }
 
 export default function Review() {
   const { route, status } = useApp()
-  const [tab, setTab] = useState(route.params.get('tab') === 'failed' ? 'failed' : 'review')
+  const [tab, setTab] = useState(TAB_PARAM[route.params.get('tab')] || 'review')
   const [items, setItems] = useState(null)
   const [selected, setSelected] = useState(null)
 
@@ -225,29 +225,26 @@ export default function Review() {
   }), [counts])
 
   return (
-    <div className="page">
-      <PageHead crumb="review" meta={`${tabCount.review} waiting`} text="The" accent="queue."
-        lead="Every rendered Short lands here first. Watch it, pick a title, tweak anything, approve. Nothing uploads until you say so (unless a category runs in Auto mode)." />
-      <AddClip onAdded={load} />
-      <div className="tabs reveal d4">
-        {TABS.map(([key, label]) => (
-          <button key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); setSelected(null) }}>
-            <span data-scramble="">{label}</span> {tabCount[key] > 0 && <span className="badge">{tabCount[key]}</span>}
-          </button>
-        ))}
+    <div className="page fill">
+      <PageHead idx={2} crumb="review" title="The" accent="queue."
+        lead="Every rendered Short lands here first. Watch it, pick a title, tweak anything, approve.">
+        <span className="chip accent">{tabCount.review} waiting</span>
+      </PageHead>
+      <div className="review-bar">
+        <Tabs tabs={TABS.map(([k, l]) => [k, l, tabCount[k]])} value={tab} onChange={(k) => { setTab(k); setSelected(null) }} />
+        <AddClip onAdded={load} />
       </div>
-      {items === null ? <div className="faint label">Loading…</div> : items.length === 0 ? (
-        <Empty title={tab === 'review' ? 'All caught up' : 'Nothing here'}>
+      {items === null ? <Loading /> : items.length === 0 ? (
+        <Empty title={tab === 'review' ? 'All caught up' : 'Nothing here'} sticker={tab === 'review' ? 'done' : 'empty'}>
           {tab === 'review' && (status?.running
             ? 'clipped is out looking for clips. New renders land here.'
             : <>Press <a className="link" href="#/dashboard">start</a> to go find clips, or paste a clip URL above.</>)}
         </Empty>
       ) : (
         <div className="review-layout">
-          <div className="queue" data-lenis-prevent="">
-            {items.map((i, n) => (
-              <button key={i.id} className={`q-item glow reveal ${selected === i.id ? 'active' : ''}`} style={{ '--d': `${Math.min(n, 8) * 0.05}s` }}
-                onClick={() => setSelected(i.id)}>
+          <div className="queue pane">
+            {items.map((i) => (
+              <button key={i.id} className={`q-item ${selected === i.id ? 'active' : ''}`} onClick={() => setSelected(i.id)}>
                 {i.thumbnail_url ? <img src={i.thumbnail_url} alt="" /> : <span className="noimg" />}
                 <span className="q-text">
                   <span className="q-title">{i.title || i.clip_id}</span>
@@ -257,9 +254,11 @@ export default function Review() {
               </button>
             ))}
           </div>
-          {detail && <Editor item={detail}
-            onChanged={(u) => { setDetail((d) => ({ ...d, ...u })); setItems((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x))) }}
-            onRemoved={(id) => { setItems((list) => list.filter((x) => x.id !== id)); setSelected(null) }} />}
+          <div className="pane editor-pane">
+            {detail ? <Editor item={detail}
+              onChanged={(u) => { setDetail((d) => ({ ...d, ...u })); setItems((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x))) }}
+              onRemoved={(id) => { setItems((list) => list.filter((x) => x.id !== id)); setSelected(null) }} /> : <Loading />}
+          </div>
         </div>
       )}
     </div>

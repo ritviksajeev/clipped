@@ -10,11 +10,11 @@ clipped runs entirely on your computer. It finds popular Twitch clips in the cat
 | A Twitch developer app (Client ID + Secret) | free | 3 min |
 | A Google Cloud project with the YouTube APIs enabled | free | 10 min |
 | ffmpeg (bundled in the desktop app) | free | - |
-| Optional: an Anthropic or OpenAI API key for AI titles | pay-as-you-go | 2 min |
+| Optional: AI titles (one click: Claude sign-in, OpenRouter, or free local Ollama) | free to pay-as-you-go | 2 min |
 
 ## Steps
 
-1. **Install and open clipped.** The dashboard opens at <http://localhost:8000>. It is only reachable from your own computer.
+1. **Install and open clipped.** It opens in its own window (run `clipped shortcut` once to put it on your Desktop and Start Menu). Everything runs on your own computer.
 2. **Twitch keys:** follow [Get your Twitch Client ID and Secret](#/guides/twitch), paste both into **Settings → Twitch**, and click **Test**.
 3. **YouTube:** follow [Connect YouTube (Google Cloud setup)](#/guides/youtube), then click **Connect YouTube** in Settings.
 4. **Pick categories:** in **Categories**, search for a game (Valorant, Counter-Strike, Fortnite, anything) and add it. Each category has its own minimum views, clip age window, language, daily limit, allowlist/blocklist and hashtags.

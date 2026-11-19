@@ -203,3 +203,68 @@ def test_linux_shortcut_entry(tmp_path, monkeypatch):
     text = made[0].read_text()
     assert made[0].name == "clipped.desktop"
     assert "-m clipped app" in text and "Terminal=false" in text and "icon.png" in text
+
+
+class FakeWin:
+    def __init__(self):
+        self.calls = []
+        self.width, self.height, self.x, self.y = 1300, 820, 40, 60
+
+    def __getattr__(self, name):
+        return lambda *a: self.calls.append(name)
+
+
+def test_window_controls_from_the_title_bar():
+    import time as _time
+
+    closed = []
+    bridge = desktop._Bridge(on_close=lambda: closed.append(True))
+    assert bridge.window_control("minimize") is False  # no window yet
+    win = FakeWin()
+    bridge._window = win
+    assert bridge.window_control("minimize") and bridge.window_control("toggle_maximize")
+    assert bridge.window_control("toggle_maximize")
+    assert win.calls == ["minimize", "maximize", "restore"]
+    assert bridge.window_control("explode") is False
+    assert bridge.window_control("close") is True
+    assert closed == []  # deferred so the bridge call can answer the page first
+    _time.sleep(0.2)
+    assert closed == [True]
+    # pywebview exposes public attributes to the page; the window must stay private
+    assert not [k for k in vars(bridge) if not k.startswith("_")]
+    assert bridge.open_url("file:///etc/passwd") is False
+
+
+def test_window_state_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(desktop.config, "data_dir", lambda: tmp_path)
+    assert desktop.load_window_state() == {"width": desktop.WINDOW_SIZE[0], "height": desktop.WINDOW_SIZE[1]}
+    desktop.save_window_state(FakeWin())
+    assert desktop.load_window_state() == {"width": 1300, "height": 820, "x": 40, "y": 60}
+    (tmp_path / "window.json").write_text('{"width": 200, "height": 99999, "x": -5000, "y": 3}')
+    state = desktop.load_window_state()
+    assert state["width"] == 980 and state["height"] == 3000 and "x" not in state  # clamped, off-screen dropped
+
+
+def test_second_launch_brings_the_window_back(tmp_path, sample_clip):
+    from tests.fakes import build_engine
+
+    engine, db, store, *_ = build_engine(tmp_path, sample_clip)
+    session = desktop.AppSession("tok")
+    shown = []
+    app = create_app(db=db, store=store, engine=engine, allowed_hosts={"testserver"}, autostart=False,
+                     app_session=session)
+    with TestClient(app) as client:
+        assert client.post("/api/app/show", headers={"X-Clipped": "1"}).status_code == 404  # no native window
+        session.on_show = lambda: shown.append(True)
+        assert client.post("/api/app/show").status_code == 403  # cross-site guard still applies
+        assert client.post("/api/app/show", headers={"X-Clipped": "1"}).json() == {"shown": True}
+    assert shown == [True]
+
+
+def test_native_window_is_preferred_on_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(desktop, "native_available", lambda: True)
+    monkeypatch.setattr(desktop, "find_app_browser", lambda: "msedge.exe")
+    assert desktop.choose_window() == "native"
+    monkeypatch.setattr(desktop, "native_available", lambda: False)
+    assert desktop.choose_window() == "app"  # e.g. pywebview failed to install: Edge app window

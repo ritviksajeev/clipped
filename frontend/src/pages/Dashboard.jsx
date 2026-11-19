@@ -1,40 +1,34 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, fmtTime } from '../api.js'
 import { engineState, useApp } from '../App.jsx'
-import { Count, Kicker, Marquee, PageHead, Warp } from '../fx/components.jsx'
+import { Count, Kicker, Loading, PageHead } from '../components/ui.jsx'
+import { useNow } from '../fx.js'
+import { Sticker } from '../stickers.jsx'
+import { BoxArt } from './Categories.jsx'
 
-function useCountdown(targetIso) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [])
-  if (!targetIso) return null
-  return Math.max(0, (new Date(targetIso).getTime() - now) / 1000)
+// The engine state, written like a burned-in caption: the word that matters
+// pops in the highlight colour, the way clipped captions a Short.
+const CAPTION = {
+  stopped: ['Engine', 'stopped'],
+  idle: ['Engine', 'running'],
+  working: ['Making', 'shorts'],
+  paused: ['Uploads', 'paused'],
+  offline: ['Engine', 'offline'],
 }
 
 function Clock({ seconds }) {
   if (seconds == null) return null
-  if (seconds <= 0) return <span className="countdown">due <span className="unit">now</span></span>
+  if (seconds <= 0) return <span className="clock">due <span className="u">now</span></span>
   const s = Math.round(seconds)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const sec = s % 60
   const pad = (n) => String(n).padStart(2, '0')
   return (
-    <span className="countdown">
-      {h > 0 && <>{h}<span className="unit">h</span></>}
-      {pad(m)}<span className="unit">m</span>{pad(sec)}<span className="unit">s</span>
+    <span className="clock">
+      {h > 0 && <>{h}<span className="u">h</span></>}{pad(m)}<span className="u">m</span>{pad(sec)}<span className="u">s</span>
     </span>
   )
-}
-
-const WORDS = {
-  stopped: ['Stopped', 'for now.'],
-  idle: ['Running', 'quietly.'],
-  working: ['Working', 'on it.'],
-  paused: ['Paused', 'on purpose.'],
-  offline: ['Offline', 'oops.'],
 }
 
 function Checklist({ status, cats }) {
@@ -47,7 +41,7 @@ function Checklist({ status, cats }) {
   if (steps.every(([, ok]) => ok)) return null
   const done = steps.filter(([, ok]) => ok).length
   return (
-    <section className="card glow reveal">
+    <section className="card glow setup">
       <div className="card-head">
         <h2>Finish setup</h2>
         <span className="chip accent">{done} / {steps.length} done</span>
@@ -60,7 +54,7 @@ function Checklist({ status, cats }) {
           </li>
         ))}
       </ol>
-      <p className="field-hint" style={{ marginTop: 14 }}>New here? Start with the <a className="link" href="#/guides/quick-start">quick start guide</a>.</p>
+      <p className="field-hint">New here? Start with the <a className="link" href="#/guides/quick-start">quick start guide</a>.</p>
     </section>
   )
 }
@@ -95,12 +89,12 @@ function Logs() {
     if (follow && box.current) box.current.scrollTop = box.current.scrollHeight
   }, [lines, follow])
   return (
-    <section className="card glow reveal">
+    <section className="card glow log-card">
       <div className="card-head">
         <h2>Live log</h2>
         <label className="check small"><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> <span className="label">follow</span></label>
       </div>
-      <div className="logs" ref={box} data-lenis-prevent="" onScroll={(e) => {
+      <div className="logs" ref={box} onScroll={(e) => {
         const el = e.currentTarget
         setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 30)
       }}>
@@ -117,31 +111,17 @@ function Logs() {
 }
 
 export default function Dashboard() {
-  const { status, refreshStatus, notify } = useApp()
-  const [busy, setBusy] = useState(false)
+  const { status, refreshStatus, notify, toggleEngine, engineBusy } = useApp()
   const [cats, setCats] = useState(null)
-  const [burst, setBurst] = useState(0)
-  const countdown = useCountdown(status?.next_upload?.at)
+  const [pressed, setPressed] = useState(0)
+  const now = useNow()
 
   useEffect(() => { api.get('/api/categories').then(setCats).catch(() => setCats([])) }, [])
 
-  if (!status || (status.offline && !status.state)) return <div className="faint label">Connecting to the engine…</div>
+  if (!status || (status.offline && !status.state)) return <Loading label="Connecting to the engine" />
   const running = status.running
   const state = engineState(status)
-  const [word, accent] = WORDS[state] || WORDS.stopped
-  const toggle = async () => {
-    setBusy(true)
-    try {
-      await api.post(running ? '/api/engine/stop' : '/api/engine/start')
-      if (!running) setBurst((b) => b + 1)
-      await refreshStatus()
-      notify(running ? 'Stopped' : 'Started. Looking for clips now.')
-    } catch (e) {
-      notify(e.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const [word, hl] = CAPTION[state] || CAPTION.stopped
   const pause = async (hours) => {
     const until = hours ? new Date(Date.now() + hours * 3600 * 1000).toISOString() : null
     await api.post('/api/engine/pause', { until })
@@ -151,13 +131,14 @@ export default function Dashboard() {
   const items = status.items || {}
   const q = status.quota || {}
   const nu = status.next_upload
+  const left = nu ? Math.max(0, (new Date(nu.at).getTime() - now) / 1000) : null
   const activity = Object.entries(status.activity || {}).filter(([, a]) => a !== 'idle')
-  const quotaPct = Math.min(100, (q.used / (q.limit || 1)) * 100)
+  const quotaPct = Math.min(100, ((q.used || 0) / (q.limit || 1)) * 100)
+  const enabled = (cats || []).filter((c) => c.enabled)
 
   return (
     <div className="page">
-      <PageHead crumb="dashboard" meta={`v${status.version || ''} · ${status.mode === 'auto' ? 'auto mode' : 'manual approval'}`}
-        text="Clip" accent="control."
+      <PageHead idx={1} crumb="dashboard" title="Clip" accent="control."
         lead={<>Mode: <b>{status.mode === 'auto' ? 'Auto' : 'Manual approval'}</b>. {status.mode === 'auto'
           ? 'clipped picks, renders and uploads on its own schedule.'
           : 'Nothing goes up until you approve it.'} <a className="link" href="#/settings/mode">Change</a></>} />
@@ -168,37 +149,35 @@ export default function Dashboard() {
 
       <Checklist status={status} cats={cats} />
 
-      <section className="hero-panel glow reveal">
-        <Warp speed={running ? 0.0034 : 0.0009} burst={burst} />
-        <div className={`orb-wrap ${running ? 'on' : ''}`}>
-          <div className="orb-rings" aria-hidden="true"><i /><i /><i /></div>
-          <button className="orb" onClick={toggle} disabled={busy} aria-pressed={running} data-magnetic="0.12"
-            data-cursor-label={running ? 'Stop' : 'Go'}>
-            <svg className="orb-icon" viewBox="0 0 24 24" aria-hidden="true">
-              {running ? <rect x="6" y="6" width="12" height="12" rx="2" /> : <path d="M8 5.5v13l11-6.5z" />}
-            </svg>
-            {running ? 'Stop' : 'Start'}
-            <small>{running ? 'engine on' : 'engine off'}</small>
-          </button>
-        </div>
-        <div className="hero-info">
-          <div className="state-word" key={state}>{word} <span className="accent">{accent}</span></div>
+      <section className={`card glow engine-card ${running ? 'on' : ''} ${state === 'paused' ? 'paused' : ''}`}>
+        <div className="engine-bg" aria-hidden="true"><i /><i /></div>
+        <button className="engine-btn" key={pressed} onClick={() => { setPressed((p) => p + 1); toggleEngine() }} disabled={engineBusy}
+          aria-pressed={running} aria-label={running ? 'Stop the engine' : 'Start the engine'}>
+          <span className="engine-orbit" aria-hidden="true" />
+          <Sticker name="power" />
+          <span className="engine-hint">{engineBusy ? 'one sec…' : running ? 'press to stop' : 'press to start'}</span>
+        </button>
+        <div className="engine-info">
+          <div className="caption-state" key={state}>
+            <span>{word}</span> <span className="hl">{hl}</span>
+          </div>
           <div className="activity">
             {activity.map(([k, a]) => (
-              <div key={k + a}><span className="chip accent">{k === 'net' ? 'network' : 'render'}</span> {a}</div>
+              <div key={k + a}><span className="chip accent">{k === 'net' ? 'network' : 'render'}</span> <span>{a}</span></div>
             ))}
             {running && !activity.length && <div className="faint">Waiting for the next job…</div>}
+            {!running && <div className="faint">Press the switch and clipped starts finding clips in your categories.</div>}
           </div>
-          <div>
-            <div className="next-label">Next upload</div>
+          <div className="next">
+            <span className="label">Next upload</span>
             {nu ? (
               <>
-                <Clock seconds={countdown} />
-                <div className="next-meta">{fmtTime(nu.at)} · {nu.reason} · “{nu.title?.slice(0, 64)}”</div>
+                <Clock seconds={left} />
+                <span className="next-meta">{fmtTime(nu.at)} · {nu.reason} · “{nu.title?.slice(0, 70)}”</span>
               </>
             ) : (
-              <div className="next-meta" style={{ marginTop: 6 }}>{status.auth_problem ? 'On hold until YouTube is reconnected'
-                : status.youtube_connected ? 'Nothing approved or ready yet' : 'Connect YouTube to upload'}</div>
+              <span className="next-meta">{status.auth_problem ? 'On hold until YouTube is reconnected'
+                : status.youtube_connected ? 'Nothing approved or ready yet' : 'Connect YouTube to upload'}</span>
             )}
           </div>
           <div className="row">
@@ -212,57 +191,60 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <Kicker idx={1} name="Numbers" meta={`${status.uploads_today}/${status.max_uploads_per_day} today`} />
+      <Kicker idx={1} name="Numbers" meta={`${status.uploads_today}/${status.max_uploads_per_day} uploaded today`} />
       <section className="stat-grid">
-        <a className="stat glow reveal" href="#/review">
+        <a className="stat glow" href="#/review">
           <span className="stat-top">Waiting for review <span className="arrow">↗</span></span>
           <span className="stat-num"><Count value={items.review || 0} /></span>
         </a>
-        <div className="stat glow reveal d1">
-          <span className="stat-top">Approved · ready</span>
+        <a className="stat glow" href="#/review?tab=scheduled">
+          <span className="stat-top">Approved · ready <span className="arrow">↗</span></span>
           <span className="stat-num"><Count value={(items.approved || 0) + (items.ready || 0)} /></span>
+        </a>
+        <div className="stat glow">
+          <span className="stat-top">Rendering</span>
+          <span className="stat-num"><Count value={items.processing || 0} /></span>
         </div>
-        <div className="stat glow reveal d2">
-          <span className="stat-top">Uploaded today</span>
-          <span className="stat-num"><Count value={status.uploads_today} /><small> / {status.max_uploads_per_day}</small></span>
-        </div>
-        <a className="stat glow reveal d3" href="#/history">
+        <a className="stat glow" href="#/history">
           <span className="stat-top">Uploaded total <span className="arrow">↗</span></span>
           <span className="stat-num"><Count value={items.uploaded || 0} /></span>
         </a>
-        {items.processing > 0 && (
-          <div className="stat glow reveal d4">
-            <span className="stat-top">Rendering</span>
-            <span className="stat-num"><Count value={items.processing} /></span>
-          </div>
-        )}
         {items.failed > 0 && (
-          <a className="stat glow reveal d4" href="#/review?tab=failed">
+          <a className="stat glow" href="#/review?tab=failed">
             <span className="stat-top">Failed <span className="arrow">↗</span></span>
             <span className="stat-num warn-text"><Count value={items.failed} /></span>
           </a>
         )}
-        <div className="stat wide glow reveal d4">
-          <span className="stat-top">YouTube API quota <span>resets {fmtTime(q.resets_at)}</span></span>
-          <div className="stack" style={{ gap: 10 }}>
-            <span className="stat-num" style={{ fontSize: 'clamp(30px, 3vw, 44px)' }}>
-              <Count value={q.used || 0} /><small> / {(q.limit || 0).toLocaleString()} units</small>
-            </span>
-            <div className="meter"><span style={{ width: `${Math.max(quotaPct, 1.5)}%` }} /></div>
-            <span className="field-hint">About {q.uploads_left} upload(s) left today</span>
-          </div>
-        </div>
       </section>
 
-      {cats && cats.length > 0 && (
-        <section className="reveal" style={{ margin: '10px 0' }}>
-          <Marquee items={cats.map((c) => c.name)} />
-        </section>
-      )}
-
       {status.last_error && <div className="banner warn small">Last error: {status.last_error}</div>}
-      <Kicker idx={2} name="Live log" meta="streams from the engine" />
-      <Logs />
+
+      <div className="dash-grid">
+        <div className="stack">
+          <section className="card glow">
+            <div className="card-head"><h2>YouTube quota</h2><span className="label">resets {fmtTime(q.resets_at)}</span></div>
+            <div className="quota-num"><Count value={q.used || 0} /><small> / {(q.limit || 0).toLocaleString()} units</small></div>
+            <div className="meter"><span style={{ width: `${Math.max(quotaPct, 1.5)}%` }} /></div>
+            <p className="field-hint">About {q.uploads_left ?? 0} upload(s) left today.</p>
+          </section>
+          <section className="card glow">
+            <div className="card-head"><h2>Watching</h2><a className="ulink" href="#/categories">Edit</a></div>
+            {cats === null ? <Loading /> : enabled.length === 0 ? (
+              <p className="muted small">No categories yet. <a className="link" href="#/categories">Pick your games</a>.</p>
+            ) : (
+              <div className="mini-cats">
+                {enabled.slice(0, 8).map((c, i) => (
+                  <a key={c.id} href="#/categories" className="mini-cat" title={c.name}>
+                    <BoxArt src={c.box_art_url} i={i} size="md" />
+                    <span className="tip">{c.name}<small>{c.uploads} up</small></span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+        <Logs />
+      </div>
     </div>
   )
 }
