@@ -14,7 +14,7 @@ The first time you switch anything to Auto mode, clipped asks you to confirm thi
 
 * **Manual approval is the default.** Nothing uploads until you approve it.
 * **Approved streamers only** (on by default in Auto mode): clips from streamers who aren't on your approved list, or on that category's allowlist, go to the review queue instead of being uploaded.
-* **Rate limits:** a minimum gap between any two uploads (default 20 minutes), a per-day cap, your chosen interval, quiet hours, and a "pause until" switch.
+* **Rate limits:** a minimum gap between scheduled uploads (default 20 minutes), a per-day cap, your chosen interval, quiet hours, and a "pause until" switch. They pace the schedule only: **Upload now** on a Short you approved goes straight away, limited only by YouTube's own quota.
 * **Quota aware:** clipped stops before YouTube's daily API quota runs out and resumes after the reset.
 * **Credit is mandatory:** every title or description, including your manual edits, keeps the streamer's name, a link to their channel, and a link to the original clip.
 * **No near-duplicates:** the same clip is never processed twice, and clips of the same moment or too similar to recent uploads are skipped.

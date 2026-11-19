@@ -204,7 +204,7 @@ def test_daily_cap_moves_to_next_local_day():
                          last_auto=None, uploads_on_day=lambda t: 4 if t.astimezone(NY).date() == today else 0)
     local = s.at.astimezone(NY)
     assert local.date() == NOW.astimezone(NY).date() + timedelta(days=1) and local.hour == 0
-    assert s.reason == "daily upload limit reached"
+    assert s.reason.startswith("your daily cap of") and "Settings → Mode & schedule" in s.reason
 
 
 def test_quiet_hours_spanning_midnight():

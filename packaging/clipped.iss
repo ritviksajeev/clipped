@@ -9,7 +9,7 @@
 ; and the Windows keychain, so updating or uninstalling never touches them.
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 
 [Setup]

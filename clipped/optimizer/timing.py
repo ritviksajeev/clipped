@@ -85,7 +85,8 @@ def next_slot(
     for _ in range(14):  # converge: daily cap and quiet hours can push each other
         moved = False
         if uploads_on_day(at) >= schedule.max_uploads_per_day:
-            at, reason, moved = next_local_midnight(at, tz), "daily upload limit reached", True
+            at, reason, moved = (next_local_midnight(at, tz), f"your daily cap of {schedule.max_uploads_per_day} "
+                                 "uploads is reached (Settings → Mode & schedule)", True)
         if in_quiet_hours(at, schedule.quiet_hours, tz):
             at, reason, moved = end_of_quiet(at, schedule.quiet_hours, tz), "quiet hours", True
         if not moved:

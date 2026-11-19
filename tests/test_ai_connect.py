@@ -18,6 +18,14 @@ CLIP = ClipInfo(id="c1", url="https://clips.twitch.tv/c1", title="insane ace", b
                 broadcaster_login="tenz", game_name="VALORANT")
 REPLY = {"variants": [{"style": "hype", "title": "TenZ hits the ace", "hook_text": "watch this",
                        "blurb": "unreal", "hashtags": ["#valorant"]}]}
+GEMINI_OK = {"candidates": [{"content": {"parts": [{"text": json.dumps(REPLY)}]}}]}
+
+
+@pytest.fixture(autouse=True)
+def fresh_gemini_pauses():
+    metadata.reset_gemini_pauses()  # which models are skipped is remembered per process
+    yield
+    metadata.reset_gemini_pauses()
 
 
 # --------------------------------------------------------------------------- OpenRouter
@@ -254,7 +262,7 @@ def test_gemini_titles_request_and_reply():
 @pytest.mark.parametrize("status,body,message", [
     (400, {"error": {"status": "INVALID_ARGUMENT", "details": [{"reason": "API_KEY_INVALID"}]}}, "rejected"),
     (403, {"error": {"status": "PERMISSION_DENIED"}}, "rejected"),
-    (429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, "quota"),
+    (429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, "per-minute limit"),
     (404, {"error": {"status": "NOT_FOUND"}}, "not found"),
 ])
 def test_gemini_errors_are_explained(status, body, message):
@@ -403,3 +411,106 @@ def test_titles_use_the_keys_saved_while_the_clip_was_rendering(monkeypatch):
     opts.title_settings = broken  # never lose the titles over it
     runner.make_variants(analysis, opts)
     assert seen["keys"] == {}
+
+
+def _quota_429(per: str, limit: str, delay: str = "") -> httpx.Response:
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{
+        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+        "quotaId": f"GenerateRequestsPer{per}PerProjectPerModel-FreeTier", "quotaValue": limit}]}]
+    if delay:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay})
+    return httpx.Response(429, json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": details}})
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1_800_000_000.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_daily_quota_moves_to_flash_lite_and_stops_asking_flash():
+    calls, clock = [], Clock()
+
+    def handler(request):
+        calls.append(request.url.path.rsplit("/", 1)[-1].split(":")[0])
+        if metadata.GEMINI_FALLBACK_MODEL in request.url.path:
+            return httpx.Response(200, json=GEMINI_OK)
+        return _quota_429("Day", "20", "40s")
+
+    run = lambda: metadata.gemini_variants("AIzaKeyOne", "", CLIP, "t", ["hype"], [],  # noqa: E731
+                                           transport=httpx.MockTransport(handler), sleep=lambda s: None, now=clock)
+    assert run()[0].source == "gemini"
+    assert calls == ["gemini-flash-latest", metadata.GEMINI_FALLBACK_MODEL]  # a quota error isn't retried
+    notices = metadata.gemini_notices("AIzaKeyOne", now=clock())
+    assert len(notices) == 1 and "free daily quota (20 requests a day)" in notices[0]
+
+    calls.clear()
+    clock.t += 3600
+    run()
+    assert calls == [metadata.GEMINI_FALLBACK_MODEL]  # Flash is left alone until Google resets it
+    assert metadata.gemini_notices("AIzaOtherKey", now=clock()) == []  # another key isn't affected
+
+    calls.clear()
+    clock.t += 24 * 3600  # past midnight Pacific
+    run()
+    assert calls == ["gemini-flash-latest", metadata.GEMINI_FALLBACK_MODEL]
+
+
+def test_when_every_model_is_out_of_quota_no_time_is_wasted():
+    calls, clock = [], Clock()
+
+    def handler(request):
+        calls.append(1)
+        return _quota_429("Day", "20")
+
+    def run():
+        return metadata.gemini_variants("AIzaKeyTwo", "", CLIP, "t", ["hype"], [],
+                                        transport=httpx.MockTransport(handler), sleep=lambda s: None, now=clock)
+
+    with pytest.raises(metadata.LLMError, match="free daily quota"):
+        run()
+    assert len(calls) == 2
+    with pytest.raises(metadata.LLMError, match="free daily quota"):
+        run()
+    assert len(calls) == 2  # both paused: not a single request for the next clip
+
+
+def test_a_model_without_free_quota_and_a_per_minute_limit():
+    clock = Clock()
+    transport = httpx.MockTransport(lambda r: _quota_429("Day", "0") if "flash-latest" in r.url.path
+                                    else _quota_429("Minute", "10", "17s"))
+    with pytest.raises(metadata.LLMError) as err:
+        metadata.gemini_variants("AIzaKeyThree", "", CLIP, "t", ["hype"], [], transport=transport,
+                                 sleep=lambda s: None, now=clock)
+    assert "isn't included in your key's free tier" in str(err.value)
+    assert "per-minute limit" in str(err.value)
+    clock.t += 18  # the per-minute pause is over, the free-tier one is not
+    notices = metadata.gemini_notices("AIzaKeyThree", now=clock())
+    assert len(notices) == 1 and "free tier" in notices[0]
+
+
+def test_an_overloaded_model_is_skipped_for_a_few_minutes():
+    calls, clock = [], Clock()
+
+    def handler(request):
+        calls.append(request.url.path)
+        if metadata.GEMINI_FALLBACK_MODEL in request.url.path:
+            return httpx.Response(200, json=GEMINI_OK)
+        return httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}})
+
+    def run():
+        return metadata.gemini_variants("AIzaKeyFour", "", CLIP, "t", ["hype"], [],
+                                        transport=httpx.MockTransport(handler), sleep=lambda s: None, now=clock)
+
+    run()
+    assert len(calls) == 4  # three tries on Flash, then Flash-Lite
+    calls.clear()
+    clock.t += 60
+    run()
+    assert len(calls) == 1 and metadata.GEMINI_FALLBACK_MODEL in calls[0]
+    calls.clear()
+    clock.t += metadata.BUSY_PAUSE
+    run()
+    assert len(calls) == 4  # tried again once the pause is over

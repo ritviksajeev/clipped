@@ -78,6 +78,7 @@ class ItemPatch(BaseModel):
     commentary: Optional[str] = Field(None, max_length=300)
     chosen: Optional[int] = None
     reframe: Optional[ReframeSettings] = None
+    subtitles: Optional[bool] = None  # burn word-by-word captions into this Short
 
 
 class ApproveBody(BaseModel):
@@ -465,6 +466,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         gs = db.get_global_settings()
         keys = store.status()
         profile = ai.anthropic_profile()
+        gemini_key = store.get("gemini_api_key") if keys["gemini_api_key"]["set"] else None
         login = ant_login.snapshot()
         if login["state"] == "done":
             use_provider_if_unset("anthropic")
@@ -476,7 +478,9 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
                           or ai.anthropic_env_key()},
             "openrouter": {"connected": keys["openrouter_api_key"]["set"], "hint": keys["openrouter_api_key"]["hint"]},
             "openai": {"ready": keys["openai_api_key"]["set"]},
-            "gemini": {"ready": keys["gemini_api_key"]["set"], "hint": keys["gemini_api_key"]["hint"]},
+            "gemini": {"ready": keys["gemini_api_key"]["set"], "hint": keys["gemini_api_key"]["hint"],
+                       # e.g. "gemini-flash-latest used up its free daily quota (20 requests a day), back after 09:01"
+                       "notices": metadata.gemini_notices(gemini_key) if gemini_key else []},
             "ollama": ai.ollama_status(gs.metadata.ollama_url),
         }
 
@@ -615,6 +619,10 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             analysis = dict(item["analysis"])
             analysis["reframe_override"] = body.reframe.model_dump(mode="json")
             fields.update(analysis=analysis, needs_rerender=True)
+        if body.subtitles is not None and body.subtitles != (item["analysis"].get("subtitles") is not False):
+            analysis = dict(fields.get("analysis", item["analysis"]))
+            analysis["subtitles"] = body.subtitles
+            fields.update(analysis=analysis, needs_rerender=True)
         if "title" in fields or "description" in fields:
             fields["title"], fields["description"] = metadata.ensure_credit(
                 fields.get("title", item["title"]), fields.get("description", item["description"]), clip,
@@ -631,7 +639,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         if not item["video_path"]:
             raise HTTPException(409, "This clip has no rendered video yet")
         if body.upload_now:
-            engine.check_rate_limit()
+            engine.check_manual_upload()
         updated = db.update_item(item_id, status="approved", approved_at=utcnow(), error="", attempts=0,
                                  next_attempt_at=None)
         log.info("Approved “%s”", item["title"][:60])
@@ -660,7 +668,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             raise HTTPException(409, "Approve the clip first")
         if not engine.youtube_ready():
             raise HTTPException(400, "Connect YouTube first (Settings)")
-        engine.check_rate_limit()
+        engine.check_manual_upload()
         engine.run_now("net", engine.upload_item, item_id)
         return {"queued": True}
 

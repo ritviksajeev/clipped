@@ -12,7 +12,7 @@ HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 class CaptionStyle(BaseModel):
-    """Burned-in captions are always on; this only controls how they look."""
+    """How the burned-in captions look. They are on unless switched off for a Short in review."""
 
     font: str = "Inter Black"
     font_size: int = Field(86, ge=36, le=160)
@@ -135,7 +135,7 @@ class QuietHours(BaseModel):
 class ScheduleSettings(BaseModel):
     upload_interval_minutes: int = Field(120, ge=10, le=10080)
     max_uploads_per_day: int = Field(4, ge=1, le=50)
-    min_gap_minutes: int = Field(20, ge=5, le=1440, description="Hard floor between any two uploads")
+    min_gap_minutes: int = Field(20, ge=5, le=1440, description="Floor between scheduled uploads (Upload now ignores it)")
     quiet_hours: QuietHours = Field(default_factory=QuietHours)
     pause_until: Optional[datetime] = None
     fetch_interval_minutes: int = Field(30, ge=5, le=1440)

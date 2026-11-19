@@ -225,7 +225,10 @@ export default function Dashboard() {
             <div className="card-head"><h2>YouTube quota</h2><span className="label">resets {fmtTime(q.resets_at)}</span></div>
             <div className="quota-num"><Count value={q.used || 0} /><small> / {(q.limit || 0).toLocaleString()} units</small></div>
             <div className="meter"><span style={{ width: `${Math.max(quotaPct, 1.5)}%` }} /></div>
-            <p className="field-hint">About {q.uploads_left ?? 0} upload(s) left today.</p>
+            <p className="field-hint">Room for about {q.uploads_left ?? 0} more upload(s) in YouTube's quota today.
+              {' '}Your own cap: {status.uploads_today ?? 0}/{status.max_uploads_per_day} today.</p>
+            {(status.uploads_today ?? 0) >= status.max_uploads_per_day && (q.uploads_left ?? 0) > 0 &&
+              <p className="field-hint warn-text">Scheduled uploads have hit your daily cap. Upload now still works, or raise <a className="link" href="#/settings/mode">Max uploads per day</a>.</p>}
           </section>
           <section className="card glow">
             <div className="card-head"><h2>Watching</h2><a className="ulink" href="#/categories">Edit</a></div>

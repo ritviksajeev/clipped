@@ -76,6 +76,31 @@ def test_category_crud_and_auto_ack(env):
 
 
 @requires_ffmpeg
+def test_subtitles_can_be_switched_off_for_one_short(env, sample_clip, tmp_path):
+    client, engine, db, store, twitch, yt, clock = env
+    twitch.clips = [make_clip(0, sample_clip, now=clock())]
+    db.add_category("516575", "VALORANT", settings=CategorySettings())
+    engine.fetch_due()
+    item = engine.render_step()
+    ass = tmp_path / "work" / item["clip_id"] / "captions.ass"
+    assert ",Caption," in ass.read_text("utf-8")  # on by default
+
+    r = client.patch(f"/api/items/{item['id']}", json={"subtitles": False, "hook_text": "NO SUBS"}, headers=H).json()
+    assert r["analysis"]["subtitles"] is False and r["needs_rerender"] is True
+    assert client.post(f"/api/items/{item['id']}/rerender", headers=H).json() == {"queued": True}
+    engine._pools["render"].submit(lambda: None).result()
+    text = ass.read_text("utf-8")
+    assert ",Caption," not in text and "NO SUBS" in text  # captions gone, the hook stays
+    assert client.get(f"/api/items/{item['id']}").json()["needs_rerender"] is False
+
+    # Same value again: nothing to re-render
+    assert client.patch(f"/api/items/{item['id']}", json={"subtitles": False}, headers=H).json()["needs_rerender"] is False
+    client.patch(f"/api/items/{item['id']}", json={"subtitles": True}, headers=H)
+    client.post(f"/api/items/{item['id']}/rerender", headers=H)
+    engine._pools["render"].submit(lambda: None).result()
+    assert ",Caption," in ass.read_text("utf-8")
+
+
 def test_review_queue_edit_approve_and_upload(env, sample_clip):
     client, engine, db, store, twitch, yt, clock = env
     twitch.clips = [make_clip(0, sample_clip, now=clock())]
@@ -124,10 +149,19 @@ def test_reject_and_upload_now_rate_limit(env, sample_clip):
     client.post(f"/api/items/{b['id']}/approve", json={"upload_now": True}, headers=H)
     engine._pools["net"].submit(lambda: None).result()
     assert db.get_item(b["id"])["status"] == "uploaded"
-    # A second immediate upload is blocked by the minimum gap
+    # Upload now right after another isn't held back by clipped's minimum gap or daily cap...
+    gs = db.get_global_settings()
+    gs.schedule.max_uploads_per_day = 1
+    db.save_global_settings(gs)
     db.update_item(a["id"], status="approved")
-    r = client.post(f"/api/items/{a['id']}/upload-now", headers=H)
-    assert r.status_code == 409 and "Rate limit" in r.json()["detail"]
+    assert client.post(f"/api/items/{a['id']}/upload-now", headers=H).status_code == 202
+    engine._pools["net"].submit(lambda: None).result()
+    assert db.get_item(a["id"])["status"] == "uploaded"
+    # ...only by YouTube's quota
+    engine.quota.mark_exhausted()
+    c = db.create_item("Clip9", a["category_id"], mode="manual", status="approved")
+    r = client.post(f"/api/items/{c['id']}/upload-now", headers=H)
+    assert r.status_code == 409 and "quota" in r.json()["detail"]
 
 
 def test_youtube_connect_requires_client(env):

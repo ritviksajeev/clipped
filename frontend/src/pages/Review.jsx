@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDuration, fmtNum, fmtTime } from '../api.js'
 import { useApp } from '../App.jsx'
-import { Empty, Field, Loading, PageHead, Select, Tabs } from '../components/ui.jsx'
+import { Empty, Field, Loading, PageHead, Select, Tabs, Toggle } from '../components/ui.jsx'
 
 const TABS = [
   ['review', 'Needs review'],
@@ -21,6 +21,9 @@ function Editor({ item, onChanged, onRemoved }) {
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState('')
   const [frameKey, setFrameKey] = useState(0)
+  const [rendering, setRendering] = useState(false)  // a re-render is under way for this Short
+  const poll = useRef(null)
+  useEffect(() => () => clearInterval(poll.current), [])  // stop polling when another Short is opened
 
   useEffect(() => {
     setForm({
@@ -64,19 +67,35 @@ function Editor({ item, onChanged, onRemoved }) {
     onRemoved(item.id)
     refreshStatus()
   })
-  const rerender = () => run('rerender', async () => {
-    if (dirty) await save()
-    await api.post(`/api/items/${item.id}/rerender`)
-    notify('Re-rendering… the preview updates when it is done')
+  // Poll until the queued re-render has replaced the video, then refresh the preview.
+  const waitForRender = () => {
+    setRendering(true)
     const started = Date.now()
-    const poll = setInterval(async () => {
-      const fresh = await api.get(`/api/items/${item.id}`)
+    clearInterval(poll.current)
+    poll.current = setInterval(async () => {
+      let fresh
+      try { fresh = await api.get(`/api/items/${item.id}`) } catch { return }
       if (!fresh.needs_rerender || Date.now() - started > 300000) {
-        clearInterval(poll)
+        clearInterval(poll.current)
+        setRendering(false)
         onChanged(fresh)
         setFrameKey((k) => k + 1)
       }
     }, 2500)
+  }
+  const rerender = () => run('rerender', async () => {
+    if (dirty) await save()
+    await api.post(`/api/items/${item.id}/rerender`)
+    notify('Re-rendering… the preview updates when it is done')
+    waitForRender()
+  })
+  const subtitlesOn = item.analysis?.subtitles !== false
+  const setSubtitles = (on) => run('subtitles', async () => {
+    if (dirty) await save()
+    onChanged(await api.patch(`/api/items/${item.id}`, { subtitles: on }))
+    await api.post(`/api/items/${item.id}/rerender`)
+    notify(on ? 'Adding subtitles… the preview updates when it is done' : 'Removing subtitles… the preview updates when it is done')
+    waitForRender()
   })
   const retry = () => run('retry', async () => {
     const r = await api.post(`/api/items/${item.id}/retry`)
@@ -143,6 +162,9 @@ function Editor({ item, onChanged, onRemoved }) {
         <Field label="Commentary · on screen + description" hint="Your own take makes the Short more than a repost.">
           <input value={form.commentary} onChange={set('commentary')} disabled={!editable} maxLength={200} placeholder="e.g. watch his crosshair before the swing" />
         </Field>
+        <Toggle label="Subtitles" checked={subtitlesOn} disabled={!editable || !!busy || rendering}
+          hint={subtitlesOn ? 'Word-by-word captions are burned into the video.' : 'No captions. The hook and your commentary still show.'}
+          onChange={setSubtitles} />
         <div className="thumb-row">
           {item.thumbnail_url && <img key={frameKey} src={item.thumbnail_url} alt="Thumbnail" className="thumb" />}
           {editable && <label className="btn small ghost">
@@ -150,7 +172,9 @@ function Editor({ item, onChanged, onRemoved }) {
             <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadThumb(e.target.files[0])} />
           </label>}
         </div>
-        {(renderDirty || item.needs_rerender) && editable && <div className="banner warn small" style={{ marginBottom: 6 }}>Hook, thumbnail or commentary changed. Re-render to update the video (approving re-renders automatically).</div>}
+        {rendering
+          ? <div className="banner small" style={{ marginBottom: 6 }}>Re-rendering the video… the preview updates when it's done.</div>
+          : (renderDirty || item.needs_rerender) && editable && <div className="banner warn small" style={{ marginBottom: 6 }}>Hook, thumbnail or commentary changed. Re-render to update the video (approving re-renders automatically).</div>}
         <div className="actions">
           {item.status === 'review' && <>
             <button className="btn primary" disabled={!!busy} onClick={() => approve(false)}>
@@ -255,8 +279,8 @@ export default function Review() {
             ))}
           </div>
           <div className="pane editor-pane">
-            {detail ? <Editor item={detail}
-              onChanged={(u) => { setDetail((d) => ({ ...d, ...u })); setItems((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x))) }}
+            {detail ? <Editor key={detail.id} item={detail}
+              onChanged={(u) => { setDetail((d) => (d && d.id === u.id ? { ...d, ...u } : d)); setItems((list) => list.map((x) => (x.id === u.id ? { ...x, ...u } : x))) }}
               onRemoved={(id) => { setItems((list) => list.filter((x) => x.id !== id)); setSelected(null) }} /> : <Loading />}
           </div>
         </div>

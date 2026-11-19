@@ -143,9 +143,8 @@ def test_rate_limit_and_daily_cap(tmp_path, sample_clip):
     for it in (a, b):
         db.update_item(it["id"], status="approved", approved_at=clock())
     engine.upload_due()
-    assert engine.upload_due() is None  # 20 min minimum gap
-    with pytest.raises(EngineError):
-        engine.check_rate_limit()
+    assert engine.upload_due() is None  # 20 min minimum gap between scheduled uploads
+    engine.check_manual_upload()  # ...but Upload now isn't held back by it
     nxt = engine.next_upload()
     assert nxt["reason"] == "minimum gap between uploads"
     clock.advance(minutes=21)
@@ -276,6 +275,22 @@ def test_rerender_requests_do_not_pile_up(tmp_path, sample_clip, monkeypatch):
     flush()
     assert rendered == [item["id"], item["id"]]
     engine.shutdown()
+
+
+def test_upload_now_ignores_clippeds_pacing_but_not_youtubes_quota(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}])
+    gs = db.get_global_settings()
+    gs.schedule.max_uploads_per_day = 1
+    db.save_global_settings(gs)
+    item = db.create_item("Earlier", cat["id"], mode="manual", status="uploaded")
+    db.update_item(item["id"], uploaded_at=clock() - timedelta(minutes=2))  # cap reached, inside the gap
+    engine.check_manual_upload()  # still fine
+    waiting = db.create_item("Waiting", cat["id"], mode="manual", status="approved")
+    db.update_item(waiting["id"], approved_at=clock())
+    assert "daily cap of 1" in engine.next_upload()["reason"]  # the schedule still keeps to the cap
+    engine.quota.mark_exhausted()
+    with pytest.raises(EngineError, match="quota for today is used up"):
+        engine.check_manual_upload()
 
 
 def test_stats_refresh_stores_snapshots(tmp_path, sample_clip):

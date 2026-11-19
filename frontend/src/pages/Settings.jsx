@@ -165,6 +165,7 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
             <strong>{t.name}</strong>
             <span className="label">{t.by}</span>
             <span className="muted small">{t.blurb}</span>
+            {t.id === 'gemini' && st.gemini.notices?.map((n) => <span key={n} className="small warn-text">{n}. Titles use the other model or the templates meanwhile.</span>)}
             <div className="ai-actions">
               {action(t.id)}
               {ready[t.id] && st.provider !== t.id && <button className="btn small primary" onClick={use(t.id)}>Use for titles</button>}
@@ -405,8 +406,10 @@ export default function Settings() {
                     options={[...INTERVALS.map(([v, l]) => [String(v), l]), ['custom', 'Custom…']]} />
                 </Field>
                 {isCustom && <Field label="Custom interval (minutes)"><NumberInput value={sched.upload_interval_minutes} min={10} max={10080} onChange={bind('schedule.upload_interval_minutes')} /></Field>}
-                <Field label="Max uploads per day"><NumberInput value={sched.max_uploads_per_day} min={1} max={50} onChange={bind('schedule.max_uploads_per_day')} /></Field>
-                <Field label="Min gap between any uploads (min)" hint="Anti-spam floor. Also applies to manual uploads.">
+                <Field label="Max uploads per day" hint="Paces scheduled uploads. Upload now ignores it. Separate from YouTube's quota (about 6 uploads a day on a new Google project).">
+                  <NumberInput value={sched.max_uploads_per_day} min={1} max={50} onChange={bind('schedule.max_uploads_per_day')} />
+                </Field>
+                <Field label="Min gap between uploads (min)" hint="Spaces out scheduled uploads. Upload now ignores it.">
                   <NumberInput value={sched.min_gap_minutes} min={5} max={1440} onChange={bind('schedule.min_gap_minutes')} />
                 </Field>
                 <Field label="Check Twitch every (min)"><NumberInput value={sched.fetch_interval_minutes} min={5} max={1440} onChange={bind('schedule.fetch_interval_minutes')} /></Field>
@@ -439,7 +442,7 @@ export default function Settings() {
             <p className="field-hint">Credit is always on: every upload names the streamer and links their channel and the original clip. See <a className="link" href="#/guides/safety">Auto mode & staying safe</a>.</p>
           </Section>}
 
-          {section === 'captions' && <Section title="Captions" aside={<span className="chip live">always on</span>}>
+          {section === 'captions' && <Section title="Captions" aside={<span className="chip live">on by default</span>}>
             <div className="caption-layout">
               <div className="grid2">
                 <Field label="Font"><Select value={data.captions.font} onChange={bind('captions.font')} options={['Inter Black', 'Inter ExtraBold', 'Inter Bold']} /></Field>

@@ -357,15 +357,13 @@ class Engine:
             return None
         return self.upload_item(nxt["item"]["id"])
 
-    def check_rate_limit(self) -> None:
-        gs = self.settings()
-        last = self.db.last_upload_at()
-        if last and self.clock() - last < timedelta(minutes=gs.schedule.min_gap_minutes):
-            wait = timedelta(minutes=gs.schedule.min_gap_minutes) - (self.clock() - last)
-            raise EngineError(f"Rate limit: wait {int(wait.total_seconds() // 60) + 1} more minute(s) "
-                              f"(minimum gap between uploads is {gs.schedule.min_gap_minutes} min)")
-        if self.uploads_on_day(self.clock()) >= gs.schedule.max_uploads_per_day:
-            raise EngineError("Daily upload limit reached")
+    def check_manual_upload(self) -> None:
+        """Upload now is the user's own call, so clipped's pacing (the daily cap and the
+        minimum gap) doesn't apply; those only space out scheduled uploads. YouTube's
+        quota still does, because YouTube enforces it whatever we do."""
+        if not self.quota.can_spend("videos.insert"):
+            reset = self.quota.reset_at().astimezone(self.tz).strftime("%H:%M")
+            raise EngineError(f"YouTube's upload quota for today is used up. It resets at {reset}.")
 
     def upload_item(self, item_id: int) -> dict | None:
         gs = self.settings()
@@ -705,6 +703,7 @@ class Engine:
         facecam = cs.facecams.get((clip.broadcaster_login or clip.broadcaster_name).lower())
         if facecam:
             opts.reframe = opts.reframe.model_copy(update={"mode": "split", "facecam": facecam})
+        opts.subtitles = item.get("analysis", {}).get("subtitles") is not False  # switched off in review
         if item.get("analysis", {}).get("reframe_override"):
             from .models import ReframeSettings
 

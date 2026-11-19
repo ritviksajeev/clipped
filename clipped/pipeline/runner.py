@@ -46,6 +46,7 @@ class ProcessOptions:
     intro: Path | None = None
     outro: Path | None = None
     api_keys: dict = field(default_factory=dict)
+    subtitles: bool = True  # burn the word-by-word captions in (hook and commentary always show)
     # Returns (metadata settings, keys) as they are now; titles are written late in a long job.
     title_settings: Callable[[], tuple[MetadataSettings, dict]] | None = None
     stage: Callable[[str], None] | None = None  # told "Downloading", "Transcribing", "Rendering"...
@@ -177,7 +178,7 @@ def make_variants(analysis: Analysis, opts: ProcessOptions) -> list[metadata.Var
 def render_outputs(analysis: Analysis, workdir: Path, opts: ProcessOptions, hook_text: str,
                    thumb_text: str, commentary: str = "", plan: hooks.EditPlan | None = None) -> RenderOutput:
     plan = plan or plan_for(analysis, opts)
-    words = plan.remap_words(analysis.transcript.words)
+    words = plan.remap_words(analysis.transcript.words) if opts.subtitles else []
     hook_overlay = None
     if opts.hook.mode != "off" and opts.hook.hook_text and hook_text.strip():
         hook_overlay = captions.Overlay(hook_text, 0.0, min(opts.hook.hook_seconds, plan.duration))

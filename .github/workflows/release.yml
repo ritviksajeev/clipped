@@ -73,7 +73,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-          $version = if ($env:RELEASE_TAG -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "0.1.0" }
+          $version = if ($env:RELEASE_TAG -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "0.1.1" }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\clipped.iss
           if (-not (Test-Path dist\clipped-windows-x64-setup.exe)) { throw "installer was not built" }
       - name: Installer installs and uninstalls (Windows)

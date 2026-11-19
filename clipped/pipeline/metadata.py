@@ -8,11 +8,16 @@ streamer credit, a link to the original clip, #Shorts and YouTube's limits.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
+import threading
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
+from datetime import time as dt_time
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -360,64 +365,157 @@ def openrouter_variants(api_key: str, model: str, clip: ClipInfo, transcript_tex
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-flash-latest"  # Google's alias for its current Flash model (free tier)
-# Tried when the chosen model stays overloaded: lighter, on the free tier too, and far less often busy.
+# Tried when the chosen model is overloaded, silent or out of quota. Quotas are counted
+# per model, so Flash-Lite usually still has room when Flash has run out.
 GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
 # A title takes Gemini a few seconds; one that hasn't answered in 45 is stuck, not thinking.
 GEMINI_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
+BUSY_PAUSE = 5 * 60  # seconds to leave a model alone after it stayed overloaded or silent
+RATE_PAUSE = 60  # after a per-minute limit, when Google doesn't say how long to wait
+try:  # Gemini's daily quotas reset at midnight Pacific
+    PACIFIC = ZoneInfo("America/Los_Angeles")
+except Exception:  # no time zone database: Pacific standard time is close enough
+    PACIFIC = timezone(timedelta(hours=-8))
+
+# Models that can't answer right now, per API key, so a model that is out of quota or
+# overloaded costs nothing until it can work again: {(key id, model): (until, reason)}.
+_gemini_pauses: dict[tuple[str, str], tuple[float, str]] = {}
+_gemini_lock = threading.Lock()
+
+
+def _key_id(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+
+def _pause_gemini(api_key: str, model: str, until: float, reason: str) -> None:
+    with _gemini_lock:
+        _gemini_pauses[(_key_id(api_key), model)] = (until, reason)
+
+
+def _gemini_paused(api_key: str, model: str, now: float) -> str:
+    with _gemini_lock:
+        until, reason = _gemini_pauses.get((_key_id(api_key), model), (0.0, ""))
+    return reason if until > now else ""
+
+
+def gemini_notices(api_key: str, now: float | None = None) -> list[str]:
+    """Why Gemini models are being skipped for this key right now (for the Connections page)."""
+    now = time.time() if now is None else now
+    kid = _key_id(api_key)
+    with _gemini_lock:
+        return [reason for (k, _m), (until, reason) in _gemini_pauses.items() if k == kid and until > now]
+
+
+def reset_gemini_pauses() -> None:
+    with _gemini_lock:
+        _gemini_pauses.clear()
+
+
+def _clock(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%H:%M")
+
+
+def _next_pacific_midnight(now: float) -> float:
+    here = datetime.fromtimestamp(now, PACIFIC)
+    return datetime.combine(here.date() + timedelta(days=1), dt_time(0, 1), PACIFIC).timestamp()
+
+
+def _quota_pause(resp: httpx.Response, model: str, now: float) -> tuple[float, str]:
+    """Read Google's 429 details: which limit was hit, its size, and when to come back."""
+    per_day, limit, delay = False, "", 0.0
+    try:
+        details = (resp.json().get("error") or {}).get("details") or []
+    except ValueError:
+        details = []
+    for detail in details if isinstance(details, list) else []:
+        kind = str(detail.get("@type", ""))
+        if kind.endswith("QuotaFailure"):
+            for violation in detail.get("violations") or []:
+                quota = str(violation.get("quotaId", ""))
+                if "PerDay" in quota:
+                    per_day = True
+                    limit = str(violation.get("quotaValue", "") or limit)
+        elif kind.endswith("RetryInfo"):
+            match = re.fullmatch(r"(\d+(?:\.\d+)?)s", str(detail.get("retryDelay", "")))
+            delay = float(match.group(1)) if match else 0.0
+    if per_day and limit == "0":
+        return now + 24 * 3600, f"{model} isn't included in your key's free tier"
+    if per_day:
+        until = _next_pacific_midnight(now)
+        size = f" ({limit} requests a day)" if limit else ""
+        return until, f"{model} used up its free daily quota{size}, back after {_clock(until)}"
+    until = now + (delay or RATE_PAUSE)
+    return until, f"{model} hit its per-minute limit, back after {_clock(until)}"
 
 
 def gemini_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
                     hashtags: list[str], transport: httpx.BaseTransport | None = None,
-                    sleep=None) -> list[Variant]:
+                    sleep=None, now=None) -> list[Variant]:
     """Google Gemini (AI Studio API key). The key goes in a header, never the URL.
 
-    Gemini answers 503 when a model is overloaded, which is common on the free tier
-    at busy times. Try again a couple of times, then once on the lighter Flash-Lite
-    model, before giving up and letting the caller use the templates.
+    The free tier is often overloaded (503), sometimes silent, and has small per-model
+    quotas (429). So: retry a busy model twice, then move on to Flash-Lite, which has a
+    quota of its own. A model that stays busy is left alone for a few minutes, and one
+    that used up its daily quota until Google resets it, so a dead model never costs a
+    clip any time. If nothing can answer, the caller uses the templates.
     """
     model = (model or GEMINI_DEFAULT_MODEL).strip().removeprefix("models/")
     if not re.fullmatch(r"[\w.\-]+", model):
         raise LLMError("unexpected Gemini model name")
+    clock = now or time.time
     body = {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + _json_reply_hint(styles)}]},
         "contents": [{"role": "user", "parts": [{"text": _user_prompt(clip, transcript_text, styles, hashtags)}]}],
         "generationConfig": {"responseMimeType": "application/json"},
     }
     headers = {"x-goog-api-key": api_key}
+    chain = [model] + ([GEMINI_FALLBACK_MODEL] if model != GEMINI_FALLBACK_MODEL else [])
+    problems: list[str] = []
     resp: httpx.Response | None = None
     with httpx.Client(timeout=GEMINI_TIMEOUT, transport=transport) as http:
-        try:
-            resp = _post_retrying(http, GEMINI_URL.format(model=model), label="Gemini", sleep=sleep,
-                                  json=body, headers=headers)
-        except httpx.TimeoutException:
-            resp = None  # no answer in time: as good as overloaded
-        except httpx.HTTPError as exc:
-            raise LLMError("could not reach Google Gemini") from exc
-        if (resp is None or resp.status_code in RETRY_STATUSES) and model != GEMINI_FALLBACK_MODEL:
-            log.info("Gemini %s is %s; trying %s", model, "too slow" if resp is None else "overloaded",
-                     GEMINI_FALLBACK_MODEL)
+        for i, name in enumerate(chain):
+            skipped = _gemini_paused(api_key, name, clock())
+            if skipped:
+                problems.append(skipped)
+                continue
             try:
-                backup = _post_retrying(http, GEMINI_URL.format(model=GEMINI_FALLBACK_MODEL),
-                                        label="Gemini", waits=(RETRY_WAITS[0],), sleep=sleep,
-                                        json=body, headers=headers)
-            except (LLMError, httpx.HTTPError):
-                backup = None  # report the first problem, not the backup's hiccup
-            if backup is not None and backup.status_code < 400:
-                resp = backup
+                attempt = _post_retrying(http, GEMINI_URL.format(model=name), label="Gemini", sleep=sleep,
+                                         waits=RETRY_WAITS if i == 0 else (RETRY_WAITS[0],),
+                                         json=body, headers=headers)
+            except httpx.TimeoutException:
+                reason = f"{name} didn't answer within {GEMINI_TIMEOUT.read:.0f}s"
+                _pause_gemini(api_key, name, clock() + BUSY_PAUSE, reason + " (skipping it for a few minutes)")
+                problems.append(reason)
+                continue
+            except httpx.HTTPError as exc:
+                raise LLMError("could not reach Google Gemini") from exc
+            status = attempt.status_code
+            if status in (401, 403) or (status == 400 and ("API_KEY_INVALID" in attempt.text
+                                                           or "API key not valid" in attempt.text)):
+                raise LLMError("Google rejected the Gemini API key")
+            if status == 429:
+                until, reason = _quota_pause(attempt, name, clock())
+                _pause_gemini(api_key, name, until, reason)
+                problems.append(reason)
+                continue
+            if status in RETRY_STATUSES:
+                reason = f"{name} is overloaded (HTTP {status})"
+                _pause_gemini(api_key, name, clock() + BUSY_PAUSE, reason + ", skipping it for a few minutes")
+                problems.append(reason + " even after retrying")
+                continue
+            if status == 404:
+                if i == 0:
+                    raise LLMError(f"Gemini model '{name}' not found (try {GEMINI_DEFAULT_MODEL})")
+                problems.append(f"{name} isn't available")
+                continue
+            resp = attempt
+            break
     if resp is None:
-        raise LLMError(f"Gemini didn't answer within {GEMINI_TIMEOUT.read:.0f}s; it is probably overloaded")
-    if resp.status_code in (401, 403) or (resp.status_code == 400 and ("API_KEY_INVALID" in resp.text
-                                                                      or "API key not valid" in resp.text)):
-        raise LLMError("Google rejected the Gemini API key")
-    if resp.status_code == 429:
-        raise LLMError("Gemini rate limit or free-tier quota reached; try again later")
-    if resp.status_code == 404:
-        raise LLMError(f"Gemini model '{model}' not found (try {GEMINI_DEFAULT_MODEL})")
-    if resp.status_code in RETRY_STATUSES:
-        raise LLMError(f"Gemini is overloaded right now (HTTP {resp.status_code}, even after retrying); "
-                       "it usually clears within minutes")
+        raise LLMError("no Gemini model could answer: " + "; ".join(problems))
     if resp.status_code >= 400:
         raise LLMError(f"Gemini API error {resp.status_code}")
+    if problems:
+        log.info("Gemini titles came from %s (%s)", GEMINI_FALLBACK_MODEL, "; ".join(problems))
     try:
         data = resp.json()
         if (data.get("promptFeedback") or {}).get("blockReason"):
