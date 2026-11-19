@@ -33,6 +33,7 @@ from pathlib import Path
 
 from . import config
 from .logs import get_logger
+from .proc import hidden
 
 log = get_logger("desktop")
 
@@ -416,7 +417,9 @@ def run_native(url: str, session: "AppSession | None" = None, keep_running=lambd
     if on_ready is not None:
         threading.Thread(target=on_ready, args=(win, bridge, tray), daemon=True).start()
     try:
-        webview.start()  # blocks until the window is destroyed
+        # clipped's icon on the window, in Alt+Tab and on the taskbar (otherwise
+        # Windows shows Python's). WinForms wants an .ico; Qt/Cocoa take a .png.
+        webview.start(icon=str(icon_path("ico" if sys.platform == "win32" else "png")))  # blocks until closed
     finally:
         tray.stop()
 
@@ -427,10 +430,9 @@ def open_app_window(url: str) -> subprocess.Popen | None:
         return None
     profile = config.data_dir() / "app-window"
     profile.mkdir(parents=True, exist_ok=True)
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     log.info("Opening the clipped window")
     return subprocess.Popen(app_window_command(browser, url, profile), stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **hidden())
 
 
 def wait_for_close(session: AppSession, server: ServerThread, proc: subprocess.Popen | None,
@@ -455,9 +457,30 @@ def wait_for_close(session: AppSession, server: ServerThread, proc: subprocess.P
         sleep(0.5)
 
 
+APP_ID = "evzero.clipped"
+
+
+def set_app_identity() -> None:
+    """Give clipped its own identity on the Windows taskbar.
+
+    Without an explicit AppUserModelID Windows groups the window under the
+    Python interpreter and shows Python's icon; with one, the taskbar uses
+    clipped's window icon and keeps it separate from other Python programs.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception:
+        pass
+
+
 def run_app(port: int = config.DEFAULT_PORT, window: str = "auto", host: str = "127.0.0.1") -> int:
     from .api.app import create_app
 
+    set_app_identity()
     port = int(os.environ.get("CLIPPED_PORT", port))
     if existing_instance(port):
         if ask_to_show(port):
@@ -548,7 +571,7 @@ def create_shortcuts() -> list[Path]:
             env = {**os.environ, "CL_LNK": str(lnk), "CL_TARGET": target,
                    "CL_ARGS": subprocess.list2cmdline(args), "CL_ICON": str(icon_path("ico"))}
             subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], env=env, check=True,
-                           capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                           capture_output=True, **hidden())
             made.append(lnk)
     elif sys.platform.startswith("linux"):
         apps = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "applications"

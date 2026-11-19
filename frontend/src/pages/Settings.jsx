@@ -33,8 +33,41 @@ function SecretField({ name, info, onSaved, placeholder, storage }) {
 const AI_TILES = [
   { id: 'anthropic', name: 'Claude', by: 'Anthropic', blurb: 'Sign in once in your browser. No key to copy.' },
   { id: 'openrouter', name: 'OpenRouter', by: 'Claude, GPT, Gemini & free models', blurb: 'One click: approve clipped on openrouter.ai.' },
+  { id: 'gemini', name: 'Gemini', by: 'Google · free tier', blurb: 'A free API key from Google AI Studio. Paste it once.' },
   { id: 'ollama', name: 'Ollama', by: 'Free · runs on this computer', blurb: 'No account, no key, no cost. Needs Ollama installed.' },
 ]
+const GEMINI_KEY_URL = 'https://aistudio.google.com/apikey'
+
+// Gemini uses a pasted key (Google has no sign-in for other apps), saved in the OS keychain.
+function GeminiKey({ st, onSaved }) {
+  const { notify } = useApp()
+  const [value, setValue] = useState('')
+  const [editing, setEditing] = useState(false)
+  const open = (e) => { if (isDesktop()) { e.preventDefault(); openExternal(GEMINI_KEY_URL) } }
+  if (st.gemini.ready && !editing) {
+    return <>
+      <button className="btn small ghost" onClick={() => setEditing(true)}>Replace key</button>
+      <button className="btn small ghost danger" onClick={async () => { await api.del('/api/secrets/gemini_api_key'); onSaved(false) }}>Remove</button>
+    </>
+  }
+  return (
+    <div className="key-entry">
+      <input type="password" autoComplete="off" spellCheck={false} placeholder="Paste your Gemini key (AIza…)" value={value}
+        onChange={(e) => setValue(e.target.value)} />
+      <div className="row">
+        <button className="btn small primary" disabled={value.trim().length < 20} onClick={async () => {
+          try {
+            await api.put('/api/secrets/gemini_api_key', { value: value.trim() })
+            setValue(''); setEditing(false); onSaved(true)
+            notify('Gemini key saved', 'ok')
+          } catch (e) { notify(e.message, 'error') }
+        }}>Save key</button>
+        <a className="btn small" href={GEMINI_KEY_URL} target="_blank" rel="noopener" onClick={open}>Get a free key ↗</a>
+        {editing && <button className="btn small ghost" onClick={() => setEditing(false)}>Cancel</button>}
+      </div>
+    </div>
+  )
+}
 
 function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
   const { notify, route } = useApp()
@@ -79,11 +112,12 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
   })
 
   if (!st) return <section className="card glow"><div className="faint label">Checking AI connections…</div></section>
-  const ready = { anthropic: st.anthropic.ready, openrouter: st.openrouter.connected, ollama: st.ollama.running }
+  const ready = { anthropic: st.anthropic.ready, openrouter: st.openrouter.connected, ollama: st.ollama.running, gemini: st.gemini.ready }
   const status = {
     anthropic: st.anthropic.signed_in ? `signed in · ${st.anthropic.profile}` : st.anthropic.api_key ? 'API key saved' : st.anthropic.env ? 'key from environment' : 'not connected',
     openrouter: st.openrouter.connected ? `connected ${st.openrouter.hint}` : 'not connected',
     ollama: st.ollama.running ? `${st.ollama.models.length} model${st.ollama.models.length === 1 ? '' : 's'} installed` : 'not running',
+    gemini: st.gemini.ready ? `key saved ${st.gemini.hint}` : 'no key yet',
   }
   const action = (id) => {
     if (id === 'anthropic') {
@@ -99,6 +133,13 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
       if (waiting === 'openrouter') return <span className="chip wip">Approve on openrouter.ai…</span>
       if (st.openrouter.connected) return <button className="btn small ghost danger" onClick={run(async () => { await api.post('/api/ai/openrouter/disconnect'); await load(); reloadSecrets() })}>Disconnect</button>
       return <button className="btn small" onClick={connectOpenRouter}>Connect OpenRouter</button>
+    }
+    if (id === 'gemini') {
+      return <GeminiKey st={st} onSaved={async (saved) => {
+        reloadSecrets()
+        const fresh = await load()
+        if (saved && fresh.provider === 'template') await use('gemini')()
+      }} />
     }
     if (st.ollama.running) return <button className="btn small ghost" onClick={run(load)}>Refresh</button>
     return <>
@@ -370,6 +411,9 @@ export default function Settings() {
                 </Field>
                 <Field label="Check Twitch every (min)"><NumberInput value={sched.fetch_interval_minutes} min={5} max={1440} onChange={bind('schedule.fetch_interval_minutes')} /></Field>
                 <Field label="Clips to keep rendered (auto)"><NumberInput value={sched.render_ahead} min={1} max={20} onChange={bind('schedule.render_ahead')} /></Field>
+                <Field label="Review queue size (manual)" hint="clipped keeps finding and rendering clips until this many are waiting for you">
+                  <NumberInput value={sched.review_queue_size} min={1} max={200} onChange={bind('schedule.review_queue_size')} />
+                </Field>
               </div>
               <Toggle checked={sched.quiet_hours.enabled} onChange={bind('schedule.quiet_hours.enabled')} label="Quiet hours" hint="No uploads during this window (your local time)" />
               {sched.quiet_hours.enabled && <div className="grid3">
@@ -461,8 +505,9 @@ export default function Settings() {
             <div className="grid3">
               <Field label="Title generator" hint={<>Connect one in <a className="link" href="#/settings/connections">Connections</a>.</>}>
                 <Select value={data.metadata.provider} onChange={bind('metadata.provider')}
-                  options={[['template', 'Free templates'], ['anthropic', 'Claude (Anthropic)'], ['openrouter', 'OpenRouter'], ['ollama', 'Ollama (local)'], ['openai', 'OpenAI (your key)']]} /></Field>
+                  options={[['template', 'Free templates'], ['anthropic', 'Claude (Anthropic)'], ['gemini', 'Gemini (Google)'], ['openrouter', 'OpenRouter'], ['ollama', 'Ollama (local)'], ['openai', 'OpenAI (your key)']]} /></Field>
               {data.metadata.provider === 'anthropic' && <Field label="Claude model" hint="claude-haiku-5-5 is the cheapest"><input value={data.metadata.anthropic_model} onChange={(e) => upd('metadata.anthropic_model', e.target.value)} /></Field>}
+              {data.metadata.provider === 'gemini' && <Field label="Gemini model" hint="gemini-flash-latest (free tier) · gemini-pro-latest for the best titles"><input value={data.metadata.gemini_model} onChange={(e) => upd('metadata.gemini_model', e.target.value)} /></Field>}
               {data.metadata.provider === 'openai' && <Field label="OpenAI model"><input value={data.metadata.openai_model} onChange={(e) => upd('metadata.openai_model', e.target.value)} /></Field>}
               {data.metadata.provider === 'openrouter' && <Field label="OpenRouter model" hint="openrouter/auto picks for you, or any id from openrouter.ai/models"><input value={data.metadata.openrouter_model} onChange={(e) => upd('metadata.openrouter_model', e.target.value)} /></Field>}
               {data.metadata.provider === 'ollama' && <Field label="Ollama model" hint="Blank = first installed model (e.g. llama3.2)"><input value={data.metadata.ollama_model} placeholder="llama3.2" onChange={(e) => upd('metadata.ollama_model', e.target.value)} /></Field>}

@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="theme-color" content="#09090b"/>
-<title>Optional: AI titles (Claude, OpenRouter, Ollama or your own key) · clipped</title>
+<title>Optional: AI titles (Claude, Gemini, OpenRouter, Ollama or your own key) · clipped</title>
 <meta name="description" content="clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, connect an AI under Settings →"/>
 <script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"/>
@@ -30,16 +30,16 @@
   <section class="guide-hero">
     <div class="wrap">
       <div class="ph-top"><span><span class="dot"></span><a href="../index.html" data-transition>clipped</a> / <a href="index.html" data-transition>guides</a> / ai-titles</span><span>guide 04 of 07</span></div>
-      <h1 class="ph-title" data-split>Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</h1>
+      <h1 class="ph-title" data-split>Optional: AI titles (Claude, Gemini, OpenRouter, Ollama or your own key)</h1>
     </div>
   </section>
   <div class="wrap guide-layout">
     <aside class="guide-nav reveal">
       <h3>SETUP GUIDES</h3>
-      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition class="active">Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
+      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition class="active">Optional: AI titles (Claude, Gemini, OpenRouter, Ollama or your own key)</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
     </aside>
     <article class="prose glow reveal d1">
-      <h1>Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</h1>
+      <h1>Optional: AI titles (Claude, Gemini, OpenRouter, Ollama or your own key)</h1>
 <p>clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, connect an AI under <strong>Settings → Connections → AI titles</strong>. Most options are a single button, with no key to copy.</p>
 <p>Whichever generator you use, clipped always adds the streamer credit, the channel link, the original clip link and <code>#Shorts</code> itself. A model can't drop them.</p>
 <h2>Claude: sign in with Anthropic</h2>
@@ -52,6 +52,14 @@
 <blockquote>
 <p><strong>Claude.ai Pro/Max chat plans can't be used here.</strong> Anthropic doesn't let other apps use a chat subscription. The same goes for ChatGPT Plus. Use the Console sign-in above, OpenRouter, or a free option.</p>
 </blockquote>
+<h2>Google Gemini: a free API key</h2>
+<p>Google's Gemini API has a free tier that comfortably covers a few titles an hour.</p>
+<ol>
+<li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">https://aistudio.google.com/apikey</a> and sign in with your Google account.</li>
+<li>Click <strong>Create API key</strong> (pick or create any Google Cloud project when asked) and copy the key. It starts with <code>AIza</code>.</li>
+<li>In clipped, paste it into the <strong>Gemini</strong> card and click <strong>Save key</strong>. clipped switches titles to Gemini if you were on the free templates.</li>
+</ol>
+<p>The key is stored in your OS keychain and only ever sent to Google, in a request header. The default model is <code>gemini-flash-latest</code> (Google's current Flash model, on the free tier). For the best titles set <code>gemini-pro-latest</code> in <strong>Settings → Titles &amp; AI</strong>; the free tier allows fewer Pro requests per day. If you hit the free-tier limit, clipped uses the templates until it resets.</p>
 <h2>OpenRouter: one account, many models</h2>
 <p><a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> gives one account access to Claude, GPT, Gemini, Llama and several free models.</p>
 <ol>

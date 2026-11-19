@@ -1,4 +1,4 @@
-# Optional: AI titles (Claude, OpenRouter, Ollama or your own key)
+# Optional: AI titles (Claude, Gemini, OpenRouter, Ollama or your own key)
 
 clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, connect an AI under **Settings → Connections → AI titles**. Most options are a single button, with no key to copy.
 
@@ -13,6 +13,16 @@ Whichever generator you use, clipped always adds the streamer credit, the channe
 The sign-in is saved by the Anthropic CLI on your computer, and the official Anthropic library refreshes it by itself. clipped never sees or stores a key. You pay Anthropic per use (usually a fraction of a cent per clip), so add credit under **Billing** at <https://console.anthropic.com/>. The default model is `claude-opus-5-5`; for the cheapest option set it to `claude-haiku-5-5` in **Settings → Titles & AI**.
 
 > **Claude.ai Pro/Max chat plans can't be used here.** Anthropic doesn't let other apps use a chat subscription. The same goes for ChatGPT Plus. Use the Console sign-in above, OpenRouter, or a free option.
+
+## Google Gemini: a free API key
+
+Google's Gemini API has a free tier that comfortably covers a few titles an hour.
+
+1. Open <https://aistudio.google.com/apikey> and sign in with your Google account.
+2. Click **Create API key** (pick or create any Google Cloud project when asked) and copy the key. It starts with `AIza`.
+3. In clipped, paste it into the **Gemini** card and click **Save key**. clipped switches titles to Gemini if you were on the free templates.
+
+The key is stored in your OS keychain and only ever sent to Google, in a request header. The default model is `gemini-flash-latest` (Google's current Flash model, on the free tier). For the best titles set `gemini-pro-latest` in **Settings → Titles & AI**; the free tier allows fewer Pro requests per day. If you hit the free-tier limit, clipped uses the templates until it resets.
 
 ## OpenRouter: one account, many models
 

@@ -476,6 +476,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
                           or ai.anthropic_env_key()},
             "openrouter": {"connected": keys["openrouter_api_key"]["set"], "hint": keys["openrouter_api_key"]["hint"]},
             "openai": {"ready": keys["openai_api_key"]["set"]},
+            "gemini": {"ready": keys["gemini_api_key"]["set"], "hint": keys["gemini_api_key"]["hint"]},
             "ollama": ai.ollama_status(gs.metadata.ollama_url),
         }
 
@@ -527,7 +528,8 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     def ai_use(body: ProviderBody):
         status = ai_status()
         ready = {"template": True, "anthropic": status["anthropic"]["ready"], "openai": status["openai"]["ready"],
-                 "openrouter": status["openrouter"]["connected"], "ollama": status["ollama"]["running"]}
+                 "openrouter": status["openrouter"]["connected"], "ollama": status["ollama"]["running"],
+                 "gemini": status["gemini"]["ready"]}
         if body.provider not in ready:
             raise HTTPException(400, "Unknown provider")
         if not ready[body.provider]:

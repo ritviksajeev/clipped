@@ -202,3 +202,18 @@ def test_youtube_desktop_callback_shows_a_page(env):
     state = parse_qs(urlparse(url).query)["state"][0]
     page = client.get(f"/oauth2callback?state={state}&error=access_denied", follow_redirects=False)
     assert page.status_code == 400 and "YouTube not connected" in page.text and "access_denied" in page.text
+
+
+def test_gemini_key_enables_the_gemini_provider(env, monkeypatch):
+    client, engine, db, store, *_ = env
+    from clipped.services import ai
+
+    monkeypatch.setattr(ai, "ollama_status", lambda url=None, transport=None: {"running": False, "models": [], "url": url})
+    assert client.get("/api/ai/status").json()["gemini"]["ready"] is False
+    assert client.post("/api/ai/use", json={"provider": "gemini"}, headers=H).status_code == 400
+    r = client.put("/api/secrets/gemini_api_key", json={"value": "AIzaSyVerySecretGeminiKey"}, headers=H)
+    assert r.json()["set"] is True and "VerySecret" not in r.text
+    st = client.get("/api/ai/status")
+    assert st.json()["gemini"]["ready"] is True and "VerySecret" not in st.text
+    assert client.post("/api/ai/use", json={"provider": "gemini"}, headers=H).status_code == 200
+    assert db.get_global_settings().metadata.provider == "gemini"

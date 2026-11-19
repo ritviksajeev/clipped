@@ -33,6 +33,7 @@ from urllib.parse import urlencode
 import httpx
 
 from ..logs import get_logger
+from ..proc import hidden
 
 log = get_logger("ai")
 
@@ -104,6 +105,7 @@ def credentials(store) -> dict:
         "anthropic_api_key": store.get("anthropic_api_key"),
         "openai_api_key": store.get("openai_api_key"),
         "openrouter_api_key": store.get("openrouter_api_key"),
+        "gemini_api_key": store.get("gemini_api_key"),
         "anthropic_signed_in": anthropic_profile()["signed_in"] or anthropic_env_key(),
     }
 
@@ -140,10 +142,9 @@ class AnthropicLogin:
                 return {"state": "waiting", "message": self.status.message, "url": self.status.url}
             self.status = LoginState("waiting", "Approve clipped in the browser window that just opened.",
                                      started_at=time.time())
-            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             self._proc = self._runner([cli, "auth", "login"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                       stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-                                      creationflags=flags)
+                                      **hidden())
         threading.Thread(target=self._watch, args=(self._proc,), daemon=True, name="ant-login").start()
         return self.snapshot()
 

@@ -109,7 +109,9 @@ function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck, index 
               options={[['inherit', 'Same as global'], ['trending', 'Trending now'], ['top24h', 'Top of the last 24h']]} />
           </Field>
           <Field label="Minimum views"><NumberInput value={s.min_views} min={0} onChange={set('min_views')} /></Field>
-          <Field label="Max clips per day"><NumberInput value={s.max_clips_per_day} min={0} max={50} onChange={set('max_clips_per_day')} /></Field>
+          <Field label="Max auto uploads per day" hint="Auto mode only. Clips you approve yourself always go up.">
+            <NumberInput value={s.max_clips_per_day} min={0} max={50} onChange={set('max_clips_per_day')} />
+          </Field>
           <Field label="Mode" hint="Overrides the global mode">
             <Select value={s.mode} onChange={(v) => {
               if (v === 'auto' && !autoAcked) requestAck(() => setS((cur) => ({ ...cur, mode: 'auto' })))

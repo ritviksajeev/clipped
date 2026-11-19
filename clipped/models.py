@@ -80,9 +80,10 @@ class HookSettings(BaseModel):
 
 
 class MetadataSettings(BaseModel):
-    provider: Literal["template", "anthropic", "openai", "openrouter", "ollama"] = "template"
+    provider: Literal["template", "anthropic", "gemini", "openai", "openrouter", "ollama"] = "template"
     anthropic_model: str = "claude-opus-5-5"
     openai_model: str = "gpt-5-mini"
+    gemini_model: str = "gemini-flash-latest"  # Google's alias for its current Flash model
     openrouter_model: str = "openrouter/auto"  # lets OpenRouter pick; any id from openrouter.ai/models works
     ollama_model: str = ""  # empty = first installed model
     ollama_url: str = "http://127.0.0.1:11434"
@@ -139,6 +140,7 @@ class ScheduleSettings(BaseModel):
     pause_until: Optional[datetime] = None
     fetch_interval_minutes: int = Field(30, ge=5, le=1440)
     render_ahead: int = Field(3, ge=1, le=20, description="Rendered clips to keep ready")
+    review_queue_size: int = Field(20, ge=1, le=200, description="Rendered clips to keep waiting for review")
 
 
 class SelectionSettings(BaseModel):
@@ -208,7 +210,7 @@ class CategorySettings(BaseModel):
     discovery: Literal["inherit", "trending", "top24h"] = "inherit"
     max_age_hours: int = Field(48, ge=1, le=24 * 30)  # superseded by `discovery`; kept so old settings load
     language: str = ""  # ISO 639-1, empty = any
-    max_clips_per_day: int = Field(3, ge=0, le=50)
+    max_clips_per_day: int = Field(3, ge=0, le=50)  # automatic uploads per day; manual approvals always go up
     allowlist: list[str] = Field(default_factory=list)
     blocklist: list[str] = Field(default_factory=list)
     hashtags: list[str] = Field(default_factory=list)

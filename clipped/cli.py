@@ -204,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--caption-position", choices=["bottom", "middle", "top"])
     p.add_argument("--font-size", type=int)
     p.add_argument("--highlight-color", help="#RRGGBB")
-    p.add_argument("--provider", choices=["template", "anthropic", "openai", "openrouter", "ollama"])
+    p.add_argument("--provider", choices=["template", "anthropic", "gemini", "openai", "openrouter", "ollama"])
     p.add_argument("--style", choices=["hype", "question", "descriptive", "streamer"], help="preferred title style")
     p.add_argument("--hashtag", action="append", help="extra hashtag (repeatable)")
     p.add_argument("--commentary", help="commentary text shown on screen and added to the description")
@@ -244,12 +244,59 @@ def _ensure_streams() -> None:
             setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
 
 
+def _windowless_command() -> list[str] | None:
+    """How to start this same clipped as a windowless desktop app (Windows)."""
+    from pathlib import Path
+
+    exe = Path(sys.executable)
+    if getattr(sys, "frozen", False):
+        app = exe.with_name("clipped.exe")
+        return [str(app)] if exe.name.lower() != "clipped.exe" and app.exists() else None
+    pythonw = exe.with_name("pythonw.exe")
+    return [str(pythonw), "-m", "clipped", "app"] if pythonw.exists() else None
+
+
+def _hand_off_to_window(argv: list[str]) -> bool:
+    """`clipped` typed in Command Prompt: start the app without a console and
+    give the prompt back, instead of tying the app to this window (closing it
+    would quit clipped). `clipped app` still runs here, with its log."""
+    import os
+    import subprocess
+    import time
+
+    if sys.platform != "win32" or argv or os.environ.get("CLIPPED_STAY_IN_CONSOLE"):
+        return False
+    try:
+        interactive = sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        interactive = False
+    command = _windowless_command() if interactive else None
+    if not command:
+        return False
+    detached = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(command, creationflags=detached, close_fds=True, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("Opening clipped in its own window...", flush=True)
+    from .desktop import existing_instance
+
+    ports = range(config.DEFAULT_PORT, config.DEFAULT_PORT + 20)
+    for _ in range(60):
+        if any(existing_instance(p) for p in ports):
+            print("clipped is running. You can close this window.", flush=True)
+            return True
+        time.sleep(0.5)
+    print("clipped did not open. Run `clipped app` to see what went wrong.", flush=True)
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     _ensure_streams()
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
+        if _hand_off_to_window(argv):
+            return 0
         args = parser.parse_args([*argv, "app"])  # no command: open the app window
     setup_logging(config.logs_dir(), level=10 if args.verbose else 20)
     return int(args.func(args) or 0)

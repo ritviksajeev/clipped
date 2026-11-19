@@ -67,15 +67,52 @@ def test_candidates_expire_when_no_longer_trending(tmp_path, sample_clip):
 
 
 def test_failed_and_rejected_clips_do_not_use_up_the_daily_limit(tmp_path, sample_clip):
-    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}, {}, {}],
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}, {}, {}], mode="auto",
                                                cat_settings=CategorySettings(max_clips_per_day=1))
+    gs = db.get_global_settings()
+    gs.approved_streamers_only = False
+    db.save_global_settings(gs)
     engine.fetch_due()
     # Earlier attempts today that produced nothing (e.g. the missing-cuBLAS failures)
     for clip_id, status in (("Earlier1", "failed"), ("Earlier2", "rejected")):
-        db.create_item(clip_id, cat["id"], mode="manual", status=status)
+        db.create_item(clip_id, cat["id"], mode="auto", status=status)
     item = engine.render_step()
-    assert item and item["status"] == "review"
-    assert engine.render_step() is None  # the one real clip fills today's allowance
+    assert item and item["status"] == "ready"
+    assert engine.render_step() is None  # auto mode: the one real clip fills today's allowance
+
+
+def test_manual_queue_keeps_filling_past_the_daily_limit(tmp_path, sample_clip):
+    """Manual mode renders clips for you to pick from until the review queue is full,
+    whatever the category's daily upload limit."""
+    clips = [{"streamer": f"S{i}", "login": f"s{i}", "title": f"moment {i}"} for i in range(4)]
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, clips,
+                                               cat_settings=CategorySettings(max_clips_per_day=1))
+    gs = db.get_global_settings()
+    gs.schedule.review_queue_size = 3
+    gs.selection.similarity_threshold = 1.0  # the test clips share one transcript
+    db.save_global_settings(gs)
+    engine.fetch_due()
+    rendered = [engine.render_step() for _ in range(3)]
+    assert [i["status"] for i in rendered] == ["review", "review", "review"]
+    assert engine.render_step() is None  # queue full: wait for you
+    db.update_item(rendered[0]["id"], status="approved", approved_at=clock())
+    assert engine.render_step()["status"] == "review"  # approving makes room too
+
+
+def test_auto_uploads_respect_the_category_limit_but_approvals_do_not(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [], mode="auto",
+                                               cat_settings=CategorySettings(max_clips_per_day=1))
+    done = db.create_item("UpToday", cat["id"], mode="auto", status="uploaded")
+    db.update_item(done["id"], uploaded_at=clock() - timedelta(hours=2))
+    ready = db.create_item("Ready1", cat["id"], mode="auto", status="ready")
+    db.update_item(ready["id"], score=0.9)
+    assert engine.next_upload() is None  # this category already had its automatic upload today
+    mine = db.create_item("Mine", cat["id"], mode="manual", status="approved")
+    db.update_item(mine["id"], approved_at=clock())
+    assert engine.next_upload()["item"]["id"] == mine["id"]  # something you approved always goes up
+    clock.advance(hours=23)
+    db.update_item(mine["id"], status="rejected")
+    assert engine.next_upload()["item"]["id"] == ready["id"]  # a day later the category has room again
 
 
 def test_manual_flow_review_approve_upload(tmp_path, sample_clip):

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from ..config import require_binary
+from ..proc import hidden
 from .ffmpeg import FFmpegError
 
 SAMPLE_RATE = 16000
@@ -22,7 +23,7 @@ def decode_mono(path: Path, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
         require_binary("ffmpeg"), "-hide_banner", "-nostdin", "-i", str(path),
         "-vn", "-ac", "1", "-ar", str(sample_rate), "-f", "s16le", "-",
     ]
-    proc = subprocess.run(cmd, capture_output=True, timeout=600)
+    proc = subprocess.run(cmd, capture_output=True, timeout=600, **hidden())
     if proc.returncode != 0:
         stderr = proc.stderr.decode("utf-8", "replace")
         if "does not contain any stream" in stderr or "Output file #0 does not contain" in stderr:

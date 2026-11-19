@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..config import require_binary
 from ..logs import get_logger
+from ..proc import hidden
 
 log = get_logger("ffmpeg")
 
@@ -35,7 +36,7 @@ def run(args: list[str], cwd: Path | None = None, timeout: float | None = 1800) 
     log.debug("ffmpeg %s", " ".join(args))
     proc = subprocess.run(
         cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout,
+        encoding="utf-8", errors="replace", timeout=timeout, **hidden(),
     )
     if proc.returncode != 0:
         tail = "\n".join(proc.stderr.strip().splitlines()[-25:])
@@ -48,7 +49,8 @@ def probe(path: Path) -> MediaInfo:
         require_binary("ffprobe"), "-v", "error", "-print_format", "json",
         "-show_streams", "-show_format", str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                          **hidden())
     if proc.returncode != 0:
         raise FFmpegError(f"ffprobe failed for {path.name}: {proc.stderr.strip()[-500:]}")
     data = json.loads(proc.stdout or "{}")
@@ -103,7 +105,7 @@ def has_libass() -> bool:
     try:
         proc = subprocess.run(
             [require_binary("ffmpeg"), "-hide_banner", "-filters"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, **hidden(),
         )
     except Exception:
         return False

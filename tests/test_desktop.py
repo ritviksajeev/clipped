@@ -293,3 +293,34 @@ def test_first_window_fits_small_screens():
     tiny = desktop.fit_to_screen({"width": 1380, "height": 900}, (1024, 600))
     assert tiny["width"] == 984 and tiny["height"] == 600  # never below the minimum unless the screen is smaller
     assert desktop.fit_to_screen({"width": 1200, "height": 800, "x": 10, "y": 10}, (1920, 1080))["x"] == 10
+
+
+def test_typing_clipped_in_command_prompt_hands_off_to_a_windowless_app(tmp_path, monkeypatch, capsys):
+    from clipped import cli
+
+    (tmp_path / "python.exe").write_text("", "utf-8")
+    (tmp_path / "pythonw.exe").write_text("", "utf-8")
+    started = []
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            started.append((cmd, kw))
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.delenv("CLIPPED_STAY_IN_CONSOLE", raising=False)
+    import subprocess as sp
+
+    monkeypatch.setattr(sp, "Popen", FakePopen)
+    monkeypatch.setattr(desktop, "existing_instance", lambda port: port == 8001)
+    monkeypatch.setattr(desktop, "run_app", lambda **kw: (_ for _ in ()).throw(AssertionError("should hand off")))
+    assert cli.main([]) == 0
+    cmd, kw = started[0]
+    assert cmd == [str(tmp_path / "pythonw.exe"), "-m", "clipped", "app"]
+    assert kw["creationflags"] & 0x8  # detached: no console
+    assert "You can close this window" in capsys.readouterr().out
+    # `clipped app` stays in the console (for logs), and shortcuts (no console) never hand off
+    assert cli._hand_off_to_window(["app"]) is False
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
+    assert cli._hand_off_to_window([]) is False

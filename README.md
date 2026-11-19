@@ -14,7 +14,7 @@ It runs on **your computer** with **your own API keys**. There is no clipped ser
 * **Full pipeline per clip:** fetch top clips → dedupe (never the same clip twice, nor the same moment clipped by someone else) → download (yt-dlp) → transcribe locally (faster-whisper, word timestamps) → **burned-in captions** (always on: word-level, large bold text, current word highlighted with a pop animation, configurable font/colours/position, kept inside the Shorts safe area) → reframe to 9:16 (blurred-background fill, facecam/gameplay split, or centre crop) → hook → title/description/hashtags → thumbnail → upload.
 * **Hooks:** trims dead air, cuts long silences, opens with a short flash-forward to the loudest moment, and shows on-screen hook text for the first 2 seconds.
 * **Credit is mandatory:** the streamer's name, a link to their channel, and a link to the original clip are always in the description, and the name goes in the title too. Your edits can't remove them.
-* **Manual approval (default):** a review queue with video preview, 2-3 title variants, and editable title, description, hashtags, hook, thumbnail and commentary. Approve, reject or re-render.
+* **Manual approval (default):** clipped keeps finding and rendering clips until the review queue is full (20 by default) so there's always a pick ready; a review queue with video preview, 2-3 title variants, and editable title, description, hashtags, hook, thumbnail and commentary. Approve, reject or re-render.
 * **Auto mode:** upload interval (30 min / 2 h / 6 h / 24 h / custom), daily cap, minimum gap, quiet hours and "pause until". It ranks clips by your discovery mode (current view velocity, or total views for top-24h), ideal length (15-45 s) and hype (audio loudness peaks plus transcript keywords), and skips clips that are too long, too quiet or too similar to recent uploads.
 * **Learns from your channel:** stores views and retention for every upload (YouTube Data + Analytics APIs), learns which title style works (Thompson sampling) and which posting hours perform best, then favours them. It also spreads uploads across streamers and categories. A **"What's working"** page shows the results.
 * **Dashboard:** big Start/Stop, status, next-upload countdown, live logs, review queue, upload history with YouTube links and stats, and YouTube API quota usage with automatic backoff and pause-until-reset.
@@ -45,7 +45,7 @@ docker compose up -d --build
 # open http://localhost:8000
 ```
 
-Data and keys live in the `clipped-data` volume. Containers have no OS keychain, so keys are stored in `/data/secrets.json`, readable only by the container user. You can also inject keys as environment variables (`CLIPPED_TWITCH_CLIENT_ID`, `CLIPPED_TWITCH_CLIENT_SECRET`, `CLIPPED_GOOGLE_CLIENT_ID`, `CLIPPED_GOOGLE_CLIENT_SECRET`, `CLIPPED_ANTHROPIC_API_KEY`, `CLIPPED_OPENAI_API_KEY`).
+Data and keys live in the `clipped-data` volume. Containers have no OS keychain, so keys are stored in `/data/secrets.json`, readable only by the container user. You can also inject keys as environment variables (`CLIPPED_TWITCH_CLIENT_ID`, `CLIPPED_TWITCH_CLIENT_SECRET`, `CLIPPED_GOOGLE_CLIENT_ID`, `CLIPPED_GOOGLE_CLIENT_SECRET`, `CLIPPED_ANTHROPIC_API_KEY`, `CLIPPED_GEMINI_API_KEY`, `CLIPPED_OPENAI_API_KEY`).
 
 ### From source
 
@@ -118,6 +118,7 @@ Your Google Cloud project won't be "verified" by Google, and it doesn't need to 
 Free templates work out of the box. To use AI-written variants, open **Settings → Connections → AI titles** and click one button:
 
 * **Sign in with Anthropic (Claude):** uses the free Anthropic CLI (`ant`). Your browser opens, you approve, and the CLI saves a sign-in that the official Anthropic library refreshes by itself, so clipped never handles a key. This is an Anthropic Console account billed per use (add credit at <https://console.anthropic.com/>). The default model is `claude-opus-5-5`; `claude-haiku-5-5` is the cheapest. clipped requests low effort and structured JSON output, and turns on Anthropic's server-side refusal fallback for models that support it.
+* **Google Gemini:** paste a free API key from <https://aistudio.google.com/apikey> into the Gemini card. The default model is `gemini-flash-latest` (free tier); `gemini-pro-latest` writes better titles.
 * **Connect OpenRouter:** approve clipped on openrouter.ai (OAuth PKCE) and it receives a key made just for clipped, stored in your keychain. One account covers Claude, GPT, Gemini, Llama and free models; the default `openrouter/auto` lets OpenRouter choose.
 * **Ollama:** free and local. Install it from <https://ollama.com>, `ollama pull llama3.2`, and clipped detects it.
 * **Or paste a key:** Anthropic (`sk-ant-…`) or OpenAI keys still work under *…or paste an API key instead*.

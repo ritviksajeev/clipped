@@ -225,3 +225,63 @@ def test_credentials_never_include_profile_tokens(tmp_path, monkeypatch):
 
     creds = ai.credentials(Store())
     assert creds["anthropic_signed_in"] is True and "tok" not in json.dumps(creds)
+
+
+# --------------------------------------------------------------------------- Google Gemini
+
+def test_gemini_titles_request_and_reply():
+    seen = {}
+
+    def handler(request: httpx.Request):
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers.get("x-goog-api-key")
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+            {"text": "thinking about it", "thought": True},  # thought summaries are not the answer
+            {"text": json.dumps(REPLY)},
+        ]}}]})
+
+    variants = metadata.gemini_variants("AIzaSyTestKey123", "", CLIP, "t", ["hype"], [],
+                                        transport=httpx.MockTransport(handler))
+    assert seen["url"] == ("https://generativelanguage.googleapis.com/v1beta/models/"
+                           "gemini-flash-latest:generateContent")
+    assert "AIza" not in seen["url"] and seen["key"] == "AIzaSyTestKey123"  # the key never goes in the URL
+    assert seen["body"]["generationConfig"]["responseMimeType"] == "application/json"
+    assert "hook_text" in seen["body"]["systemInstruction"]["parts"][0]["text"]  # exact JSON shape spelled out
+    assert variants[0].source == "gemini" and "ace" in variants[0].title
+
+
+@pytest.mark.parametrize("status,body,message", [
+    (400, {"error": {"status": "INVALID_ARGUMENT", "details": [{"reason": "API_KEY_INVALID"}]}}, "rejected"),
+    (403, {"error": {"status": "PERMISSION_DENIED"}}, "rejected"),
+    (429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, "quota"),
+    (404, {"error": {"status": "NOT_FOUND"}}, "not found"),
+])
+def test_gemini_errors_are_explained(status, body, message):
+    transport = httpx.MockTransport(lambda r: httpx.Response(status, json=body))
+    with pytest.raises(metadata.LLMError, match=message):
+        metadata.gemini_variants("AIzaSyTestKey123", "gemini-flash-latest", CLIP, "", ["hype"], [], transport=transport)
+
+
+def test_gemini_blocked_prompt_and_bad_model_name():
+    blocked = httpx.MockTransport(lambda r: httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}}))
+    with pytest.raises(metadata.LLMError, match="declined"):
+        metadata.gemini_variants("k", "", CLIP, "", ["hype"], [], transport=blocked)
+    with pytest.raises(metadata.LLMError, match="model name"):
+        metadata.gemini_variants("k", "../../evil", CLIP, "", ["hype"], [])
+
+
+def test_gemini_is_used_when_selected_and_keyed(monkeypatch):
+    seen = {}
+
+    def fake(api_key, model, *a, **k):
+        seen.update(key=api_key, model=model)
+        return [metadata.Variant(style="hype", title="From Gemini", hook_text="", blurb="", source="gemini")]
+
+    monkeypatch.setattr(metadata, "gemini_variants", fake)
+    out = metadata.generate_variants(CLIP, "", MetadataSettings(provider="gemini"), ["hype"], [], [],
+                                     {"gemini_api_key": "AIzaKey"})
+    assert seen == {"key": "AIzaKey", "model": "gemini-flash-latest"} and out[0].source == "gemini"
+    seen.clear()
+    out = metadata.generate_variants(CLIP, "", MetadataSettings(provider="gemini"), ["hype"], [], [], {})
+    assert not seen and out[0].source == "template"  # no key: free templates

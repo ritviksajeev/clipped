@@ -36,7 +36,6 @@ from .services.youtube import AuthError, QuotaExceeded, UploadRequest, YouTubeCl
 log = get_logger("engine")
 
 PRODUCED_STATUSES = ("processing", "review", "ready", "approved", "uploading", "uploaded")
-MAX_PENDING_REVIEWS = 12
 MAX_UPLOAD_ATTEMPTS = 5
 STATS_REFRESH_HOURS = 6
 KEEP_VIDEOS_DAYS = 14
@@ -302,13 +301,26 @@ class Engine:
                  if not i["next_attempt_at"] or i["next_attempt_at"] <= now_iso]
         return approved, ready
 
+    def _category_upload_limit_reached(self, category_id: int | None) -> bool:
+        """Has this category had its automatic uploads for the last 24 hours?
+        (Clips you approved yourself are never held back by it.)"""
+        if category_id is None:
+            return False
+        cat = self.db.get_category(category_id)
+        if not cat:
+            return False
+        limit = CategorySettings.model_validate(cat["settings"]).max_clips_per_day
+        done = self.db.count_items(category_id=category_id, statuses=["uploaded", "uploading"],
+                                   uploaded_since=self.clock() - timedelta(hours=24))
+        return done >= limit
+
     def next_upload(self, gs: GlobalSettings | None = None) -> dict | None:
         """The next scheduled upload (item + slot), for the countdown and the worker."""
         gs = gs or self.settings()
         approved, ready = self.upload_candidates()
         if approved:
             item, kind = approved[0], "manual"
-        elif ready:
+        elif ready := [i for i in ready if not self._category_upload_limit_reached(i["category_id"])]:
             window = gs.optimizer.diversity_window
             recent = self.recent_for_diversity(window)
             item = max(ready, key=lambda i: i["score"] * learning.diversity_factor(
@@ -503,15 +515,19 @@ class Engine:
             row["score"], _ = ranking.pre_score(clip, gs.selection, now, disc,
                                                 (row["score_detail"] or {}).get("recent_velocity"))
             mode = self.effective_mode(cat, gs)
-            if mode == "manual" and pending_review >= MAX_PENDING_REVIEWS:
+            # Manual mode keeps the review queue topped up; the per-category daily
+            # limit is about uploads, so it doesn't stop clips being rendered for you
+            # to choose from.
+            if mode == "manual" and pending_review >= gs.schedule.review_queue_size:
                 continue
-            if mode == "auto" and pending_ready >= gs.schedule.render_ahead:
-                continue
-            # Only clips that actually came out count: a failed render or a clip you
-            # rejected must not use up the category's daily allowance.
-            if self.db.count_items(category_id=cat["id"], since=since,
-                                   statuses=PRODUCED_STATUSES) >= cs.max_clips_per_day:
-                continue
+            if mode == "auto":
+                if pending_ready >= gs.schedule.render_ahead:
+                    continue
+                # Auto renders are headed for upload: stop once the category has
+                # produced today's allowance. Failed or rejected clips don't count.
+                if self.db.count_items(category_id=cat["id"], since=since,
+                                       statuses=PRODUCED_STATUSES) >= cs.max_clips_per_day:
+                    continue
             factor = learning.diversity_factor(clip.broadcaster_login or clip.broadcaster_name, cat["id"], recent,
                                                window=window, penalty=gs.optimizer.diversity_penalty)
             if row["score"] * factor > best_score:
