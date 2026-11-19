@@ -247,3 +247,15 @@ def test_stats_refresh_stores_snapshots(tmp_path, sample_clip):
     stats = db.stats_for(item["id"])
     assert stats[-1]["views"] == 100 and stats[-1]["avg_view_pct"] == 70.0
     assert engine.refresh_stats_due() == 0  # not due again yet
+
+
+def test_fetch_log_says_why_clips_were_filtered(tmp_path, sample_clip, caplog):
+    import logging
+
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip,
+                                               [{"views": 3}, {"views": 7}, {"hours_old": 9}, {}],
+                                               cat_settings=CategorySettings(min_views=50))
+    with caplog.at_level(logging.INFO, logger="clipped.engine"):
+        engine.fetch_due()
+    line = next(r.getMessage() for r in caplog.records if "filtered out" in r.getMessage())
+    assert "1 new clip(s), 3 filtered out (2 under 50 views, 1 too old)" in line

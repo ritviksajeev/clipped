@@ -157,6 +157,23 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
     for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "faster_whisper",
                   "huggingface_hub", "hf_xet", "filelock", "anthropic", "pywebview"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    logging.getLogger("asyncio").addFilter(ClientDisconnectFilter())
+
+
+class ClientDisconnectFilter(logging.Filter):
+    """On Windows, asyncio reports every connection the app window drops
+    mid-request (skipping through a video preview, switching clips) as an
+    error with a traceback ("ConnectionResetError: [WinError 10054]"). Nothing
+    failed, so leave those out of the log."""
+
+    DROPPED = (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc = record.exc_info[1] if record.exc_info else None
+        if isinstance(exc, self.DROPPED):
+            return False
+        text = record.getMessage()
+        return not ("_call_connection_lost" in text and ("10054" in text or "10053" in text))
 
 
 def get_logger(name: str) -> logging.Logger:

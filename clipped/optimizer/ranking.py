@@ -120,3 +120,19 @@ def eligible(clip: ClipInfo, cat: CategorySettings, sel: SelectionSettings,
     if clip.duration and clip.duration < sel.min_seconds:
         return False, f"too short ({clip.duration:.0f}s)"
     return True, ""
+
+
+def reason_group(reason: str, cat: CategorySettings) -> str:
+    """Short label for why a clip was filtered out, for the fetch summary."""
+    r = (reason or "").lower()
+    if r.startswith("only "):
+        return f"under {cat.min_views} views"
+    for prefix, label in (("older than", "too old"), ("language", "other language"), ("too long", "too long"),
+                          ("too short", "too short"), ("same moment", "same moment")):
+        if r.startswith(prefix):
+            return label
+    if "blocklist" in r:
+        return "blocklisted streamer"
+    if "allowlist" in r:
+        return "not on the allowlist"
+    return r[:40] or "other"

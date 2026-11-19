@@ -15,6 +15,7 @@ import random
 import re
 import shutil
 import threading
+from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
@@ -236,6 +237,7 @@ class Engine:
             self.last_error = str(exc)
             return 0
         new = skipped = refreshed = 0
+        reasons: Counter[str] = Counter()
         for clip in clips:
             existing = self.db.get_clip(clip.id)
             if existing:
@@ -252,9 +254,12 @@ class Engine:
             if self.db.insert_clip(clip, cat["id"], score, detail, "new" if ok else "skipped", reason):
                 new += ok
                 skipped += not ok
+                if not ok:
+                    reasons[ranking.reason_group(reason, cs)] += 1
         self.db.mark_fetched(cat["id"], now)
-        log.info("%s (%s, last %gh): %d new clip(s), %d filtered out, %d updated", cat["name"],
-                 ranking.DISCOVERY_LABELS[mode], hours, new, skipped, refreshed)
+        why = f" ({', '.join(f'{n} {label}' for label, n in reasons.most_common(3))})" if reasons else ""
+        log.info("%s (%s, last %gh): %d new clip(s), %d filtered out%s, %d updated", cat["name"],
+                 ranking.DISCOVERY_LABELS[mode], hours, new, skipped, why, refreshed)
         return new
 
     def _refresh_candidate(self, row: dict, clip: ClipInfo, cs: CategorySettings, gs: GlobalSettings,

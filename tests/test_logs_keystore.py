@@ -80,3 +80,23 @@ def test_env_override_for_docker(monkeypatch):
     monkeypatch.setenv("CLIPPED_TWITCH_CLIENT_ID", "envclientid")
     store = keystore.KeyStore(MemoryBackend())
     assert store.get("twitch_client_id") == "envclientid"
+
+
+def test_windows_client_disconnect_noise_is_dropped():
+    import logging
+
+    from clipped.logs import ClientDisconnectFilter
+
+    f = ClientDisconnectFilter()
+    try:
+        raise ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host")
+    except ConnectionResetError:
+        import sys
+
+        exc_info = sys.exc_info()
+    noisy = logging.LogRecord("asyncio", logging.ERROR, __file__, 1,
+                              "Exception in callback _ProactorBasePipeTransport._call_connection_lost()", None, exc_info)
+    assert f.filter(noisy) is False
+    real = logging.LogRecord("asyncio", logging.ERROR, __file__, 1, "Task exception was never retrieved", None,
+                             (ValueError, ValueError("boom"), None))
+    assert f.filter(real) is True  # real problems still get logged
