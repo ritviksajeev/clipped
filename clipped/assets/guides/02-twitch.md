@@ -15,7 +15,7 @@ Twitch requires 2FA before you can register apps.
 2. Click **Register Your Application** (or **+ Register Your Application**).
 3. Fill in:
    * **Name:** anything unique, for example `clipped-yourname`. Twitch names must be globally unique.
-   * **OAuth Redirect URLs:** `http://localhost`. clipped doesn't use it, but the field is required.
+   * **OAuth Redirect URLs:** `https://localhost` (it must start with https). clipped never uses it, but the field is required. Leave only this one row.
    * **Category:** `Application Integration`.
    * **Client Type:** `Confidential`. Confidential is required to get a secret.
 4. Complete the captcha and click **Create**.

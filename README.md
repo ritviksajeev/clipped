@@ -86,7 +86,7 @@ The same guides are built into the app (**Guides** in the sidebar) and on the we
 
 1. Turn on two-factor authentication: <https://www.twitch.tv/settings/security>.
 2. Open <https://dev.twitch.tv/console/apps> → **Register Your Application**.
-3. **Name:** something unique (e.g. `clipped-yourname`). **OAuth Redirect URLs:** `http://localhost`. **Category:** Application Integration. **Client Type:** Confidential. Click **Create**.
+3. **Name:** something unique (e.g. `clipped-yourname`). **OAuth Redirect URLs:** `https://localhost` (Twitch requires https; clipped never uses it). **Category:** Application Integration. **Client Type:** Confidential. Click **Create**.
 4. Click **Manage**, copy the **Client ID**, then click **New Secret** and copy the secret.
 5. In clipped: **Settings → Connections → Twitch**, paste both, click **Save**, then **Test Twitch**.
 
