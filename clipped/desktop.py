@@ -222,6 +222,28 @@ def load_window_state() -> dict:
         return {"width": WINDOW_SIZE[0], "height": WINDOW_SIZE[1]}
 
 
+def primary_screen(webview_module) -> tuple[int, int] | None:
+    try:
+        screen = webview_module.screens[0]
+        return int(screen.width), int(screen.height)
+    except Exception:
+        return None
+
+
+def fit_to_screen(state: dict, screen: tuple[int, int] | None) -> dict:
+    """Never open bigger than the screen (a 1366x768 laptop can't show 1380x900)."""
+    if not screen:
+        return state
+    sw, sh = screen
+    state = dict(state)
+    state["width"] = max(min(MIN_SIZE[0], sw), min(state["width"], sw - 40))
+    state["height"] = max(min(MIN_SIZE[1], sh), min(state["height"], sh - 60))
+    if "x" in state and (state["x"] > sw - 120 or state["y"] > sh - 80):
+        state.pop("x", None)
+        state.pop("y", None)  # saved on a monitor that is gone: let Windows centre it
+    return state
+
+
 def save_window_state(win) -> None:
     try:
         state = {"width": int(win.width), "height": int(win.height), "x": int(win.x), "y": int(win.y)}
@@ -381,7 +403,7 @@ def run_native(url: str, session: "AppSession | None" = None, keep_running=lambd
 
     tray = Tray(on_show=show, on_quit=quit_app)
     bridge = _Bridge(on_close=request_close)
-    geometry = load_window_state()
+    geometry = fit_to_screen(load_window_state(), primary_screen(webview))
     win = webview.create_window(
         "clipped", url, min_size=MIN_SIZE, frameless=True, easy_drag=False, background_color="#09090b",
         js_api=bridge, **geometry,

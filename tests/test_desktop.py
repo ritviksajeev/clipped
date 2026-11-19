@@ -283,3 +283,13 @@ def test_edge_resize_is_clamped_and_off_when_maximised():
     bridge.window_control("toggle_maximize")
     assert bridge.window_state() == {"maximized": True}
     assert bridge.resize_window(1300, 900) is False and len(sizes) == 2
+
+
+def test_first_window_fits_small_screens():
+    big = {"width": 1380, "height": 900, "x": 2400, "y": 40}
+    assert desktop.fit_to_screen(big, None) == big
+    small = desktop.fit_to_screen(big, (1366, 768))
+    assert small == {"width": 1326, "height": 708}  # fits, and the off-screen position is dropped
+    tiny = desktop.fit_to_screen({"width": 1380, "height": 900}, (1024, 600))
+    assert tiny["width"] == 984 and tiny["height"] == 600  # never below the minimum unless the screen is smaller
+    assert desktop.fit_to_screen({"width": 1200, "height": 800, "x": 10, "y": 10}, (1920, 1080))["x"] == 10

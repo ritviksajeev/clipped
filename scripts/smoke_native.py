@@ -98,8 +98,12 @@ def main() -> int:
                 check("found the window", w32.hwnd, hex(w32.hwnd))
                 check("no OS title bar (frameless)", not w32.has_caption())
 
-            js("window.pywebview.api.resize_window(1100, 720)")
-            check("edge resize through the bridge", wait(lambda: abs(win.width - 1100) <= 3 and abs(win.height - 720) <= 3, 10),
+            # CI screens can be as small as 1024x768; Windows caps a window near the screen size.
+            screen = desktop.primary_screen(__import__("webview"))
+            check("first window fits the screen", screen and win.width <= screen[0] and win.height <= screen[1],
+                  f"{win.width}x{win.height} on {screen}")
+            js("window.pywebview.api.resize_window(990, 700)")
+            check("edge resize through the bridge", wait(lambda: abs(win.width - 990) <= 3 and abs(win.height - 700) <= 3, 10),
                   f"{win.width}x{win.height}")
 
             js("document.querySelector('.win-ctl button[aria-label=\"Maximise\"]').click()")
