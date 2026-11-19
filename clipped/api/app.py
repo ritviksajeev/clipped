@@ -636,7 +636,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
                                  next_attempt_at=None)
         log.info("Approved “%s”", item["title"][:60])
         if updated["needs_rerender"]:
-            engine.run_now("render", engine.rerender_item, item_id)
+            engine.queue_rerender(item_id, only_if_needed=True)
         if body.upload_now:
             engine.run_now("net", engine.upload_item, item_id)
         return item_view(updated)
@@ -649,8 +649,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     def rerender(item_id: int):
         if not db.get_item(item_id):
             raise HTTPException(404, "Item not found")
-        engine.run_now("render", engine.rerender_item, item_id)
-        return {"queued": True}
+        return {"queued": engine.queue_rerender(item_id)}
 
     @app.post("/api/items/{item_id}/upload-now", status_code=202)
     def upload_now(item_id: int):

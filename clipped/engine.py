@@ -80,6 +80,7 @@ class Engine:
         self._futures: dict[str, Future | None] = {"net": None, "render": None}
         self._loop_task: asyncio.Task | None = None
         self._lock = threading.RLock()
+        self._rerenders_queued: set[int] = set()  # one waiting re-render per item
         self.tick_seconds = 10.0
         self.rng = random.Random()
 
@@ -554,6 +555,8 @@ class Engine:
             intro=Path(intro) if intro and Path(intro).exists() else None,
             outro=Path(outro) if outro and Path(outro).exists() else None,
             api_keys=ai.credentials(self.store),
+            # read again just before titles are written, so a key saved mid-render counts
+            title_settings=lambda: (self.settings().metadata, ai.credentials(self.store)),
         )
 
     def process_clip_row(self, row: dict, cat: dict | None, gs: GlobalSettings, force_manual: bool = False) -> dict | None:
@@ -663,6 +666,31 @@ class Engine:
         row = self.db.get_clip(clip_id)
         cat = self.db.get_category(row["category_id"]) if row and row["category_id"] else None
         return self.process_clip_row(row, cat, self.settings(), force_manual=True)
+
+    def queue_rerender(self, item_id: int, only_if_needed: bool = False) -> bool:
+        """Queue a re-render on the render worker, at most one waiting per item.
+
+        Clicking Re-render and then Approve, or clicking twice, must not render the
+        same Short twice: on a busy worker those jobs used to pile up and run minutes
+        later. ``only_if_needed`` (used by Approve) skips the work if, by the time the
+        job runs, an earlier re-render already brought the video up to date.
+        """
+        with self._lock:
+            if item_id in self._rerenders_queued:
+                return False
+            self._rerenders_queued.add(item_id)
+        self.run_now("render", self._run_queued_rerender, item_id, only_if_needed)
+        return True
+
+    def _run_queued_rerender(self, item_id: int, only_if_needed: bool) -> dict | None:
+        with self._lock:
+            self._rerenders_queued.discard(item_id)  # edits made from here on may queue another
+        item = self.db.get_item(item_id)
+        if not item or item["status"] in ("uploading", "uploaded", "rejected"):
+            return item
+        if only_if_needed and not item["needs_rerender"]:
+            return item
+        return self.rerender_item(item_id)
 
     def rerender_item(self, item_id: int) -> dict:
         gs = self.settings()

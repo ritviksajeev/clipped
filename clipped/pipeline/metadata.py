@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import random
 import re
+import time
 from dataclasses import asdict, dataclass, field
 
 import httpx
@@ -272,9 +273,47 @@ def anthropic_variants(api_key: str | None, model: str, clip: ClipInfo, transcri
     return _parse_variants(payload, styles, "anthropic")
 
 
+# Busy or briefly unreachable: worth another try. Anything else is a real answer.
+RETRY_STATUSES = frozenset({500, 502, 503, 504})
+RETRY_WAITS = (3.0, 8.0)  # seconds between attempts, so three tries in all
+
+
+def _retry_after(resp: httpx.Response | None) -> float:
+    try:
+        return min(30.0, max(0.0, float(resp.headers.get("retry-after", "")))) if resp is not None else 0.0
+    except ValueError:  # an HTTP date instead of seconds; use our own wait
+        return 0.0
+
+
+def _post_retrying(http: httpx.Client, url: str, *, label: str, waits: tuple[float, ...] = RETRY_WAITS,
+                   sleep=None, **kwargs) -> httpx.Response:
+    """POST, trying again while the service is overloaded (5xx) or the connection drops.
+
+    Returns the last response, which may still be a 5xx once the tries run out.
+    """
+    for attempt in range(len(waits) + 1):
+        resp = None
+        try:
+            resp = http.post(url, **kwargs)
+        except (httpx.NetworkError, httpx.RemoteProtocolError, httpx.ConnectTimeout) as exc:
+            # The connection failed or dropped. (A reply that was merely slow is not
+            # retried: three 90-second waits would stall the render queue.)
+            if attempt == len(waits):
+                raise LLMError(f"could not reach {label}") from exc
+            why = "connection dropped"
+        else:
+            if resp.status_code not in RETRY_STATUSES or attempt == len(waits):
+                return resp
+            why = f"HTTP {resp.status_code}"
+        delay = max(waits[attempt], _retry_after(resp))
+        log.info("%s is busy (%s); trying again in %.0fs", label, why, delay)
+        (sleep or time.sleep)(delay)
+    raise AssertionError("unreachable")
+
+
 def chat_variants(url: str, api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
                   hashtags: list[str], *, source: str, label: str, extra_headers: dict | None = None,
-                  transport: httpx.BaseTransport | None = None) -> list[Variant]:
+                  transport: httpx.BaseTransport | None = None, sleep=None) -> list[Variant]:
     """Any OpenAI-compatible chat completions endpoint (OpenAI, OpenRouter)."""
     body = {
         "model": model,
@@ -287,13 +326,15 @@ def chat_variants(url: str, api_key: str, model: str, clip: ClipInfo, transcript
     headers = {"Authorization": f"Bearer {api_key}", **(extra_headers or {})}
     try:
         with httpx.Client(timeout=90.0, transport=transport) as http:
-            resp = http.post(url, json=body, headers=headers)
+            resp = _post_retrying(http, url, label=label, sleep=sleep, json=body, headers=headers)
     except httpx.HTTPError as exc:
         raise LLMError(f"could not reach {label}") from exc
     if resp.status_code in (401, 403):
         raise LLMError(f"{label} rejected the key")
     if resp.status_code == 402:
         raise LLMError(f"{label} account is out of credits")
+    if resp.status_code in RETRY_STATUSES:
+        raise LLMError(f"{label} is overloaded right now (HTTP {resp.status_code}, even after retrying)")
     if resp.status_code >= 400:
         raise LLMError(f"{label} API error {resp.status_code}")
     try:
@@ -319,11 +360,21 @@ def openrouter_variants(api_key: str, model: str, clip: ClipInfo, transcript_tex
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-flash-latest"  # Google's alias for its current Flash model (free tier)
+# Tried when the chosen model stays overloaded: lighter, on the free tier too, and far less often busy.
+GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
+# A title takes Gemini a few seconds; one that hasn't answered in 45 is stuck, not thinking.
+GEMINI_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
 
 
 def gemini_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
-                    hashtags: list[str], transport: httpx.BaseTransport | None = None) -> list[Variant]:
-    """Google Gemini (AI Studio API key). The key goes in a header, never the URL."""
+                    hashtags: list[str], transport: httpx.BaseTransport | None = None,
+                    sleep=None) -> list[Variant]:
+    """Google Gemini (AI Studio API key). The key goes in a header, never the URL.
+
+    Gemini answers 503 when a model is overloaded, which is common on the free tier
+    at busy times. Try again a couple of times, then once on the lighter Flash-Lite
+    model, before giving up and letting the caller use the templates.
+    """
     model = (model or GEMINI_DEFAULT_MODEL).strip().removeprefix("models/")
     if not re.fullmatch(r"[\w.\-]+", model):
         raise LLMError("unexpected Gemini model name")
@@ -332,11 +383,29 @@ def gemini_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: s
         "contents": [{"role": "user", "parts": [{"text": _user_prompt(clip, transcript_text, styles, hashtags)}]}],
         "generationConfig": {"responseMimeType": "application/json"},
     }
-    try:
-        with httpx.Client(timeout=90.0, transport=transport) as http:
-            resp = http.post(GEMINI_URL.format(model=model), json=body, headers={"x-goog-api-key": api_key})
-    except httpx.HTTPError as exc:
-        raise LLMError("could not reach Google Gemini") from exc
+    headers = {"x-goog-api-key": api_key}
+    resp: httpx.Response | None = None
+    with httpx.Client(timeout=GEMINI_TIMEOUT, transport=transport) as http:
+        try:
+            resp = _post_retrying(http, GEMINI_URL.format(model=model), label="Gemini", sleep=sleep,
+                                  json=body, headers=headers)
+        except httpx.TimeoutException:
+            resp = None  # no answer in time: as good as overloaded
+        except httpx.HTTPError as exc:
+            raise LLMError("could not reach Google Gemini") from exc
+        if (resp is None or resp.status_code in RETRY_STATUSES) and model != GEMINI_FALLBACK_MODEL:
+            log.info("Gemini %s is %s; trying %s", model, "too slow" if resp is None else "overloaded",
+                     GEMINI_FALLBACK_MODEL)
+            try:
+                backup = _post_retrying(http, GEMINI_URL.format(model=GEMINI_FALLBACK_MODEL),
+                                        label="Gemini", waits=(RETRY_WAITS[0],), sleep=sleep,
+                                        json=body, headers=headers)
+            except (LLMError, httpx.HTTPError):
+                backup = None  # report the first problem, not the backup's hiccup
+            if backup is not None and backup.status_code < 400:
+                resp = backup
+    if resp is None:
+        raise LLMError(f"Gemini didn't answer within {GEMINI_TIMEOUT.read:.0f}s; it is probably overloaded")
     if resp.status_code in (401, 403) or (resp.status_code == 400 and ("API_KEY_INVALID" in resp.text
                                                                       or "API key not valid" in resp.text)):
         raise LLMError("Google rejected the Gemini API key")
@@ -344,6 +413,9 @@ def gemini_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: s
         raise LLMError("Gemini rate limit or free-tier quota reached; try again later")
     if resp.status_code == 404:
         raise LLMError(f"Gemini model '{model}' not found (try {GEMINI_DEFAULT_MODEL})")
+    if resp.status_code in RETRY_STATUSES:
+        raise LLMError(f"Gemini is overloaded right now (HTTP {resp.status_code}, even after retrying); "
+                       "it usually clears within minutes")
     if resp.status_code >= 400:
         raise LLMError(f"Gemini API error {resp.status_code}")
     try:

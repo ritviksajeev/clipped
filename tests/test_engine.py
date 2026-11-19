@@ -1,3 +1,4 @@
+import threading
 from datetime import timedelta
 
 import pytest
@@ -234,6 +235,47 @@ def test_rerender_after_edit_and_reject(tmp_path, sample_clip):
     ass = (tmp_path / "work" / "Clip0" / "captions.ass").read_text("utf-8")
     assert "NEW HOOK" in ass and "my take" in ass
     assert engine.reject_item(item["id"])["status"] == "rejected"
+
+
+def test_rerender_requests_do_not_pile_up(tmp_path, sample_clip, monkeypatch):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}])
+    item = db.create_item("ClipX", cat["id"], mode="manual", status="review")
+    db.update_item(item["id"], needs_rerender=True)
+    rendered = []
+
+    def fake_rerender(item_id):
+        rendered.append(item_id)
+        return db.update_item(item_id, needs_rerender=False)
+
+    monkeypatch.setattr(engine, "rerender_item", fake_rerender)
+
+    def flush():
+        engine.run_now("render", lambda: None).result(timeout=10)
+
+    gate = threading.Event()
+    engine.run_now("render", gate.wait)  # the worker is busy with a long render
+    try:
+        assert engine.queue_rerender(item["id"]) is True  # Re-render button
+        assert engine.queue_rerender(item["id"]) is False  # clicked again
+        assert engine.queue_rerender(item["id"], only_if_needed=True) is False  # then Approve
+    finally:
+        gate.set()
+    flush()
+    assert rendered == [item["id"]]
+
+    # Approve after the re-render already brought the video up to date: nothing to do
+    assert engine.queue_rerender(item["id"], only_if_needed=True) is True
+    flush()
+    assert rendered == [item["id"]]
+
+    # An explicit re-render still runs; a rejected or uploaded Short is left alone
+    engine.queue_rerender(item["id"])
+    flush()
+    db.update_item(item["id"], status="rejected")
+    engine.queue_rerender(item["id"])
+    flush()
+    assert rendered == [item["id"], item["id"]]
+    engine.shutdown()
 
 
 def test_stats_refresh_stores_snapshots(tmp_path, sample_clip):

@@ -46,6 +46,8 @@ class ProcessOptions:
     intro: Path | None = None
     outro: Path | None = None
     api_keys: dict = field(default_factory=dict)
+    # Returns (metadata settings, keys) as they are now; titles are written late in a long job.
+    title_settings: Callable[[], tuple[MetadataSettings, dict]] | None = None
     stage: Callable[[str], None] | None = None  # told "Downloading", "Transcribing", "Rendering"...
 
     def report(self, text: str) -> None:
@@ -160,9 +162,15 @@ def plan_for(analysis: Analysis, opts: ProcessOptions) -> hooks.EditPlan:
 
 
 def make_variants(analysis: Analysis, opts: ProcessOptions) -> list[metadata.Variant]:
+    settings, keys = opts.metadata, opts.api_keys
+    if opts.title_settings:
+        try:
+            settings, keys = opts.title_settings()
+        except Exception as exc:  # fall back to what the job started with
+            log.warning("Could not re-read the title settings (%s)", exc)
     return metadata.generate_variants(
-        analysis.clip, analysis.transcript.text, opts.metadata, opts.styles, opts.category_hashtags,
-        opts.all_keywords, opts.api_keys, opts.commentary,
+        analysis.clip, analysis.transcript.text, settings, opts.styles, opts.category_hashtags,
+        opts.all_keywords, keys, opts.commentary,
     )
 
 

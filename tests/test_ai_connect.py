@@ -285,3 +285,121 @@ def test_gemini_is_used_when_selected_and_keyed(monkeypatch):
     seen.clear()
     out = metadata.generate_variants(CLIP, "", MetadataSettings(provider="gemini"), ["hype"], [], [], {})
     assert not seen and out[0].source == "template"  # no key: free templates
+
+
+def test_gemini_retries_when_overloaded_then_succeeds():
+    calls, waits = [], []
+
+    def handler(request: httpx.Request):
+        calls.append(request.url.path)
+        if len(calls) < 3:
+            return httpx.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE",
+                                                       "message": "The model is overloaded."}})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": json.dumps(REPLY)}]}}]})
+
+    variants = metadata.gemini_variants("AIzaSyTestKey123", "", CLIP, "t", ["hype"], [],
+                                        transport=httpx.MockTransport(handler), sleep=waits.append)
+    assert len(calls) == 3 and all("gemini-flash-latest" in c for c in calls)
+    assert waits == list(metadata.RETRY_WAITS)
+    assert variants[0].source == "gemini"
+
+
+def test_gemini_falls_back_to_flash_lite_when_the_model_stays_busy():
+    calls = []
+
+    def handler(request: httpx.Request):
+        calls.append(request.url.path)
+        if metadata.GEMINI_FALLBACK_MODEL in request.url.path:
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": json.dumps(REPLY)}]}}]})
+        return httpx.Response(503, headers={"retry-after": "5"}, json={"error": {"status": "UNAVAILABLE"}})
+
+    waits = []
+    variants = metadata.gemini_variants("AIzaSyTestKey123", "gemini-flash-latest", CLIP, "t", ["hype"], [],
+                                        transport=httpx.MockTransport(handler), sleep=waits.append)
+    assert [c.rsplit("/", 1)[-1] for c in calls] == ["gemini-flash-latest:generateContent"] * 3 + \
+        [f"{metadata.GEMINI_FALLBACK_MODEL}:generateContent"]
+    assert waits == [max(w, 5.0) for w in metadata.RETRY_WAITS]  # Retry-After is honoured
+    assert variants[0].source == "gemini"
+
+
+def test_gemini_overload_that_never_clears_is_explained():
+    transport = httpx.MockTransport(lambda r: httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}}))
+    with pytest.raises(metadata.LLMError, match="overloaded"):
+        metadata.gemini_variants("AIzaSyTestKey123", "", CLIP, "", ["hype"], [], transport=transport,
+                                 sleep=lambda s: None)
+
+
+def test_gemini_does_not_retry_a_real_error():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(400, json={"error": {"status": "INVALID_ARGUMENT"}})
+
+    with pytest.raises(metadata.LLMError, match="API error 400"):
+        metadata.gemini_variants("k", "", CLIP, "", ["hype"], [], transport=httpx.MockTransport(handler),
+                                 sleep=lambda s: None)
+    assert len(calls) == 1
+
+
+def test_dropped_connections_are_retried_but_slow_replies_are_not(monkeypatch):
+    monkeypatch.setattr(metadata.time, "sleep", lambda s: None)
+    calls = []
+
+    def flaky(request):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectError("reset", request=request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(REPLY)}}]})
+
+    out = metadata.openai_variants("sk-test", "gpt", CLIP, "t", ["hype"], [], transport=httpx.MockTransport(flaky))
+    assert len(calls) == 2 and out[0].source == "openai"
+
+    slow_calls = []
+
+    def slow(request):
+        slow_calls.append(1)
+        raise httpx.ReadTimeout("slow", request=request)
+
+    with pytest.raises(metadata.LLMError, match="didn't answer"):
+        metadata.gemini_variants("k", "", CLIP, "", ["hype"], [], transport=httpx.MockTransport(slow),
+                                 sleep=lambda s: None)
+    assert len(slow_calls) == 2  # once on the chosen model, once on Flash-Lite; never waited out twice
+
+
+def test_gemini_that_hangs_falls_back_to_flash_lite():
+    def handler(request):
+        if metadata.GEMINI_FALLBACK_MODEL in request.url.path:
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": json.dumps(REPLY)}]}}]})
+        raise httpx.ReadTimeout("no answer", request=request)
+
+    variants = metadata.gemini_variants("k", "", CLIP, "t", ["hype"], [], transport=httpx.MockTransport(handler),
+                                        sleep=lambda s: None)
+    assert variants[0].source == "gemini"
+
+
+def test_titles_use_the_keys_saved_while_the_clip_was_rendering(monkeypatch):
+    from types import SimpleNamespace
+
+    from clipped.models import MetadataSettings
+    from clipped.pipeline import runner
+
+    seen = {}
+
+    def fake_generate(clip, text, settings, styles, hashtags, keywords, keys, commentary=""):
+        seen.update(provider=settings.provider, keys=keys)
+        return []
+
+    monkeypatch.setattr(metadata, "generate_variants", fake_generate)
+    analysis = SimpleNamespace(clip=CLIP, transcript=SimpleNamespace(text="t"))
+    opts = runner.ProcessOptions(metadata=MetadataSettings(provider="gemini"), api_keys={})
+    opts.title_settings = lambda: (MetadataSettings(provider="gemini"), {"gemini_api_key": "AIzaSaved"})
+    runner.make_variants(analysis, opts)
+    assert seen == {"provider": "gemini", "keys": {"gemini_api_key": "AIzaSaved"}}
+
+    def broken():
+        raise RuntimeError("db locked")
+
+    opts.title_settings = broken  # never lose the titles over it
+    runner.make_variants(analysis, opts)
+    assert seen["keys"] == {}

@@ -24,6 +24,8 @@ Google's Gemini API has a free tier that comfortably covers a few titles an hour
 
 The key is stored in your OS keychain and only ever sent to Google, in a request header. The default model is `gemini-flash-latest` (Google's current Flash model, on the free tier). For the best titles set `gemini-pro-latest` in **Settings → Titles & AI**; the free tier allows fewer Pro requests per day. If you hit the free-tier limit, clipped uses the templates until it resets.
 
+At busy times Google sometimes answers *503: the model is overloaded*, or doesn't answer at all. clipped then tries again twice, then once on the lighter `gemini-flash-lite-latest`, and only uses the templates for that clip if Google is still busy. It clears up within minutes, so the next clip usually gets Gemini titles again.
+
 ## OpenRouter: one account, many models
 
 [OpenRouter](https://openrouter.ai) gives one account access to Claude, GPT, Gemini, Llama and several free models.
