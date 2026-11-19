@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, fmtNum } from '../api.js'
+import { ActivityChart } from '../components/charts.jsx'
 import { Bars, Count, Empty, Kicker, Loading, PageHead } from '../components/ui.jsx'
 
 function HourChart({ rows }) {
@@ -20,8 +21,10 @@ function HourChart({ rows }) {
 
 export default function Insights() {
   const [data, setData] = useState(null)
+  const [act, setAct] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => { api.get('/api/insights').then(setData).catch((e) => setError(e.message)) }, [])
+  useEffect(() => { api.get('/api/activity?days=30').then(setAct).catch(() => {}) }, [])
   if (error) return <div className="banner error">{error}</div>
   if (!data) return <Loading />
   const s = data.summary
@@ -33,12 +36,17 @@ export default function Insights() {
         <span className="chip">{s.matured} with 24h+ of data</span>
       </PageHead>
 
-      <section className="stat-grid">
-        <div className="stat glow"><span className="stat-top">Uploads · 120 days</span><span className="stat-num"><Count value={s.uploads} /></span></div>
-        <div className="stat glow"><span className="stat-top">Total views</span><span className="stat-num"><Count value={s.total_views} format={fmtNum} /></span></div>
-        <div className="stat glow"><span className="stat-top">Avg views / short</span><span className="stat-num"><Count value={s.avg_views} format={fmtNum} /></span></div>
-        <div className="stat glow"><span className="stat-top">Avg % viewed</span><span className="stat-num">{s.avg_retention == null ? '-' : <><Count value={s.avg_retention} /><small>%</small></>}</span></div>
+      <section className="tiles">
+        <div className="tile"><span className="label">Uploads · 120 days</span><b><Count value={s.uploads} /></b></div>
+        <div className="tile"><span className="label">Total views</span><b><Count value={s.total_views} format={fmtNum} /></b></div>
+        <div className="tile"><span className="label">Avg views / Short</span><b><Count value={s.avg_views} format={fmtNum} /></b></div>
+        <div className="tile"><span className="label">Avg % viewed</span><b>{s.avg_retention == null ? '-' : <><Count value={s.avg_retention} /><small>%</small></>}</b></div>
       </section>
+
+      {act && <section className="card chart-card">
+        <div className="card-head"><h2>Last 30 days</h2><span className="label">{act.totals.made} made · {act.totals.uploaded} uploaded · {fmtNum(act.totals.views)} views</span></div>
+        <ActivityChart days={act.days} />
+      </section>}
 
       <Kicker idx={1} name="Takeaways" meta="plain words" />
       <section className="card glow">

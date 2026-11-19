@@ -12,6 +12,10 @@ on:
         description: "Publish a release with this tag, e.g. v0.1.0 (leave empty to only build and test)"
         type: string
         default: ""
+      prerelease:
+        description: "Pre-release: downloadable from its release page, but not what 'latest' download links serve"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -73,7 +77,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-          $version = if ($env:RELEASE_TAG -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "0.1.1" }
+          $version = if ($env:RELEASE_TAG -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "0.2.0" }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\clipped.iss
           if (-not (Test-Path dist\clipped-windows-x64-setup.exe)) { throw "installer was not built" }
       - name: Installer installs and uninstalls (Windows)
@@ -125,9 +129,29 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      # This repository can be private: set the repository variable RELEASES_REPO
+      # (e.g. ritviksajeev/clipped-releases, a public repo holding only installers)
+      # and the secret RELEASES_TOKEN (a fine-grained token with Contents: write on
+      # it), and releases are published there instead, where anyone can download.
+      - name: Release here
+        if: ${{ vars.RELEASES_REPO == '' }}
+        uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
           generate_release_notes: true
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
+      - name: Release in the public releases repo
+        if: ${{ vars.RELEASES_REPO != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.RELEASES_REPO }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          files: artifacts/*
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: clipped ${{ env.RELEASE_TAG }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
+          body: |
+            Windows: download clipped-windows-x64-setup.exe and run it. You'll need a licence key from https://evzero.org/clipped/buy/
+            SmartScreen may warn the first time (the installer isn't code-signed yet): More info -> Run anyway.

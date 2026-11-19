@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS items (
     approved_at TEXT,
     uploaded_at TEXT,
     youtube_id TEXT NOT NULL DEFAULT '',
+    instagram_id TEXT NOT NULL DEFAULT '',
+    instagram_url TEXT NOT NULL DEFAULT '',
+    posted_manually INTEGER NOT NULL DEFAULT 0,
     privacy_requested TEXT NOT NULL DEFAULT '',
     privacy_actual TEXT NOT NULL DEFAULT ''
 );
@@ -101,6 +104,13 @@ CREATE TABLE IF NOT EXISTS stats (
 
 CREATE TABLE IF NOT EXISTS quota (day TEXT PRIMARY KEY, units INTEGER NOT NULL DEFAULT 0);
 """
+
+# Columns added after the first release, created on older databases at start-up.
+ADDED_ITEM_COLUMNS = {
+    "instagram_id": "TEXT NOT NULL DEFAULT ''",
+    "instagram_url": "TEXT NOT NULL DEFAULT ''",
+    "posted_manually": "INTEGER NOT NULL DEFAULT 0",
+}
 
 ITEM_JSON_FIELDS = {"analysis", "variants", "tags"}
 ACTIVE_ITEM_STATES = ("processing", "review", "ready", "approved", "uploading")
@@ -135,6 +145,10 @@ class Database:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA foreign_keys=ON")
             self.conn.executescript(SCHEMA)
+            have = {r[1] for r in self.conn.execute("PRAGMA table_info(items)")}
+            for column, decl in ADDED_ITEM_COLUMNS.items():
+                if column not in have:  # databases made by an older version
+                    self.conn.execute(f"ALTER TABLE items ADD COLUMN {column} {decl}")
             self.conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             self.conn.commit()
 
@@ -273,6 +287,7 @@ class Database:
         for key in ITEM_JSON_FIELDS:
             row[key] = json.loads(row[key] or ("[]" if key != "analysis" else "{}"))
         row["needs_rerender"] = bool(row["needs_rerender"])
+        row["posted_manually"] = bool(row.get("posted_manually"))
         return row
 
     def create_item(self, clip_id: str, category_id: int | None, *, mode: str, streamer: str = "",
@@ -397,6 +412,26 @@ class Database:
             row["stats"] = latest.get(row["id"])
             out.append(row)
         return out
+
+    def daily_activity(self, days: int, tz) -> list[dict]:
+        """Per local day, oldest first: Shorts made, Shorts uploaded and the views they've had since."""
+        today = utcnow().astimezone(tz).date()
+        start_day = today - timedelta(days=days - 1)
+        start = iso(datetime.combine(start_day, datetime.min.time(), tzinfo=tz))
+        out = {start_day + timedelta(days=i): {"made": 0, "uploaded": 0, "views": 0} for i in range(days)}
+        local = lambda v: parse_dt(v).astimezone(tz).date()  # noqa: E731
+        for row in self.query("SELECT created_at FROM items WHERE created_at>=? AND status NOT IN "
+                              "('failed', 'processing')", (start,)):
+            day = local(row["created_at"])
+            if day in out:
+                out[day]["made"] += 1
+        latest = self.latest_stats()
+        for row in self.query("SELECT id, uploaded_at FROM items WHERE uploaded_at>=?", (start,)):
+            day = local(row["uploaded_at"])
+            if day in out:
+                out[day]["uploaded"] += 1
+                out[day]["views"] += int((latest.get(row["id"]) or {}).get("views") or 0)
+        return [{"day": d.isoformat(), **v} for d, v in out.items()]
 
     # ------------------------------------------------------------------ quota
     def add_quota(self, day: str, units: int) -> int:

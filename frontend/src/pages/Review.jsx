@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, fmtDuration, fmtNum, fmtTime } from '../api.js'
+import { api, fmtDuration, fmtNum, fmtTime, nativeApi } from '../api.js'
 import { useApp } from '../App.jsx'
 import { Empty, Field, Loading, PageHead, Select, Tabs, Toggle } from '../components/ui.jsx'
 
@@ -17,7 +17,8 @@ function hashtagsFrom(description) {
 }
 
 function Editor({ item, onChanged, onRemoved }) {
-  const { notify, refreshStatus } = useApp()
+  const { notify, refreshStatus, status } = useApp()
+  const downloadOnly = !!status?.download_only
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState('')
   const [frameKey, setFrameKey] = useState(0)
@@ -88,6 +89,33 @@ function Editor({ item, onChanged, onRemoved }) {
     await api.post(`/api/items/${item.id}/rerender`)
     notify('Re-rendering… the preview updates when it is done')
     waitForRender()
+  })
+  // Download the finished Short: a native Save dialog in the app window, a normal download in a browser.
+  const download = () => run('download', async () => {
+    if (dirty) await save()
+    if (item.needs_rerender) { notify('Re-render first so the download has your latest edits', 'error'); return }
+    const name = `${(form.title || item.title || 'clipped short').replace(/[<>:"/\\|?*]+/g, ' ').trim()}.mp4`
+    const bridge = nativeApi()
+    if (bridge?.save_video) {
+      const r = await bridge.save_video(item.id, name)
+      if (r?.saved) notify(`Saved to ${r.path}`, 'ok')
+      else if (r?.error) notify(`Couldn't save: ${r.error}`, 'error')
+      return
+    }
+    const a = document.createElement('a')
+    a.href = `/api/items/${item.id}/download`
+    a.download = name
+    document.body.appendChild(a); a.click(); a.remove()
+  })
+  const copyCaption = () => run('copy', async () => {
+    await navigator.clipboard.writeText(`${form.title}\n\n${form.description}`)
+    notify('Title and description copied', 'ok')
+  })
+  const markPosted = () => run('posted', async () => {
+    await api.post(`/api/items/${item.id}/posted`)
+    notify('Marked as posted')
+    onRemoved(item.id)
+    refreshStatus()
   })
   const subtitlesOn = item.analysis?.subtitles !== false
   const setSubtitles = (on) => run('subtitles', async () => {
@@ -175,7 +203,15 @@ function Editor({ item, onChanged, onRemoved }) {
         {rendering
           ? <div className="banner small" style={{ marginBottom: 6 }}>Re-rendering the video… the preview updates when it's done.</div>
           : (renderDirty || item.needs_rerender) && editable && <div className="banner warn small" style={{ marginBottom: 6 }}>Hook, thumbnail or commentary changed. Re-render to update the video (approving re-renders automatically).</div>}
+        <div className="actions secondary">
+          <button className="btn small" disabled={!!busy || !item.video_url} onClick={download}>{busy === 'download' ? 'Saving…' : 'Download'} <span className="arrow">↓</span></button>
+          <button className="btn small ghost" disabled={!!busy} onClick={copyCaption}>Copy caption</button>
+          {['review', 'approved', 'ready', 'failed'].includes(item.status) &&
+            <button className="btn small ghost" disabled={!!busy} onClick={markPosted} title="You posted it yourself">Posted it myself ✓</button>}
+        </div>
         <div className="actions">
+          {item.status === 'review' && downloadOnly && <p className="faint small" style={{ flexBasis: '100%' }}>
+            Nothing connected to post to: download it, post it yourself, then mark it posted. Or connect YouTube or Instagram in Settings.</p>}
           {item.status === 'review' && <>
             <button className="btn primary" disabled={!!busy} onClick={() => approve(false)}>
               {busy === 'approve' ? 'Approving…' : 'Approve'} <span className="arrow">→</span>

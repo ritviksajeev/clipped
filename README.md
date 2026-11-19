@@ -1,6 +1,8 @@
 # clipped
 
-**Free, local-first Twitch clips → captioned YouTube Shorts.** clipped finds popular clips in the Twitch categories you choose, turns them into vertical videos with word-by-word burned-in captions, and uploads them to your YouTube channel, either after you approve each one or fully automatically on a schedule.
+**Local-first Twitch clips → captioned YouTube Shorts and Instagram Reels.** clipped finds popular clips in the Twitch categories you choose, turns them into vertical videos with word-by-word burned-in captions, and posts them to YouTube and Instagram, either after you approve each one or fully automatically on a schedule. No accounts connected? Download each Short and post it yourself.
+
+clipped needs a licence key: **$2.99 a month or $32 for life** at <https://evzero.org/clipped/buy/>. Keys are Ed25519-signed and checked offline (see *Licence keys* below).
 
 It runs on **your computer** with **your own API keys**. There is no clipped server and no account. Nothing about you, your keys or your videos is sent anywhere except to Twitch, Google and (optionally) the AI provider you pick.
 
@@ -167,7 +169,7 @@ Learning starts after 6 uploads (titles) and 12 uploads (timing) have been live 
 
 ## Responsibility
 
-clipped is a tool. You are responsible for having permission to repost streamers' clips and for following the Twitch Terms of Service and YouTube's policies (including the reused-content rules for monetisation). Manual approval is the default, Auto mode requires a one-time acknowledgement, and "approved streamers only" is on by default. See [Auto mode & staying safe](clipped/assets/guides/06-safety.md).
+clipped is a tool. You are responsible for having permission to repost streamers' clips and for following the Twitch Terms of Service and YouTube's policies (including the reused-content rules for monetisation). Manual approval is the default, Auto mode requires a one-time acknowledgement, and "approved streamers only" is on by default. See [Auto mode & staying safe](clipped/assets/guides/07-safety.md).
 
 ## Development
 
@@ -204,6 +206,14 @@ python scripts/build_website.py          # regenerate website/guides/*.html from
 
 **Website:** plain HTML/CSS/JS in `website/`. The `pages` workflow publishes it to GitHub Pages. For Netlify, `netlify.toml` already points at `website/`.
 
-## License
+## Licence keys
 
-MIT, see [LICENSE](LICENSE). The bundled Inter, Geist, Geist Mono and Instrument Serif fonts are under the SIL Open Font License, and Lenis (smooth scrolling) is MIT-licensed (`website/vendor/LICENSE-lenis.txt`). Desktop builds include ffmpeg, which is licensed separately (GPL builds; see <https://ffmpeg.org/legal.html>).
+The app opens on a welcome screen that asks for a key. A key is a 20-byte record (plan, issue date, expiry, a random id) plus an Ed25519 signature, written as `CLIP-XXXXX-…` in Crockford base32 (about 160 characters). The app embeds only the public key (`clipped/licensing.py`), so nothing in the app or this repository can make a key. The local API refuses to work without a valid key (HTTP 402), and so does `clipped process`.
+
+* Issue keys with `scripts/license_admin.py issue --key <private key file> --plan lifetime|monthly`. The private key lives only with evzero; it is never committed (`*.pem` is ignored).
+* Monthly keys expire after 31 days (plus 3 days' grace) and are re-issued on each payment.
+* `scripts/license_admin.py show <key>` decodes and verifies a key.
+
+## Licence
+
+Proprietary: see [LICENSE](LICENSE). Copyright (c) 2026 evzero, all rights reserved. Versions up to v0.1.1 were MIT-licensed and those copies stay so. Third-party components keep their own licences (ffmpeg GPL builds, fonts under the SIL Open Font License, and the packages in `pyproject.toml` and `frontend/package.json`).

@@ -7,7 +7,7 @@ import { Sticker } from '../stickers.jsx'
 
 marked.setOptions({ gfm: true, breaks: false })
 
-const STK = { 'quick-start': 'dashboard', twitch: 'key', youtube: 'review', 'ai-titles': 'sparkle', ffmpeg: 'settings',
+const STK = { 'quick-start': 'dashboard', twitch: 'key', youtube: 'review', instagram: 'clipped', 'ai-titles': 'sparkle', ffmpeg: 'settings',
   safety: 'power', troubleshooting: 'empty' }
 
 export default function Guides() {

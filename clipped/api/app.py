@@ -20,7 +20,7 @@ import shutil
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,12 +31,14 @@ from pydantic import BaseModel, Field
 from .. import config
 from ..db import Database, iso, utcnow
 from ..engine import Engine, EngineError
-from ..keystore import SECRET_NAMES, KeyStore
+from .. import licensing
+from ..keystore import INTERNAL_SECRETS, SECRET_NAMES, KeyStore
 from ..logs import get_logger, live_buffer
 from ..models import CategorySettings, ClipInfo, GlobalSettings, ReframeSettings, normalize_hashtags
 from ..optimizer import insights
 from ..pipeline import metadata
 from ..services import ai
+from ..services.instagram import InstagramClient, InstagramError
 from ..services.twitch import TwitchClient, TwitchError
 from ..services.youtube import AuthError, OAuthFlow, YouTubeClient, YouTubeError
 
@@ -81,6 +83,10 @@ class ItemPatch(BaseModel):
     subtitles: Optional[bool] = None  # burn word-by-word captions into this Short
 
 
+class LicenseBody(BaseModel):
+    key: str = Field(..., max_length=400)
+
+
 class ApproveBody(BaseModel):
     upload_now: bool = False
 
@@ -122,6 +128,17 @@ class PauseBody(BaseModel):
 
 # --------------------------------------------------------------------------- helpers
 
+# Reachable without a licence: the welcome screen and the second-launch handoff.
+LICENSE_FREE_PATHS = ("/api/license", "/api/app/show")
+
+
+def download_name(title: str) -> str:
+    """A safe file name from a title: 'Did TenZ really just do that.mp4'."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", title or "clipped short")
+    name = re.sub(r"\s+", " ", name).strip(" .")[:80] or "clipped short"
+    return f"{name}.mp4"
+
+
 def item_view(item: dict) -> dict:
     if not item:
         return item
@@ -146,23 +163,27 @@ def needs_auto_ack(gs: GlobalSettings, categories: list[dict]) -> bool:
 
 
 def create_app(*, db: Database | None = None, store: KeyStore | None = None, engine: Engine | None = None,
-               allowed_hosts: set[str] | None = None, autostart: bool = True, app_session=None) -> FastAPI:
+               allowed_hosts: set[str] | None = None, autostart: bool = True, app_session=None,
+               instagram_factory=None) -> FastAPI:
     db = db or Database(config.db_path())
     store = store or KeyStore()
     engine = engine or Engine(db, store)
+    instagram_factory = instagram_factory or (lambda token: InstagramClient(token))
     hosts = set(allowed_hosts or DEFAULT_ALLOWED_HOSTS)
     hosts |= {h.strip() for h in os.environ.get("CLIPPED_ALLOWED_HOSTS", "").split(",") if h.strip()}
     pending_auth: dict[str, Any] = {}
     desktop_flows: set[str] = set()  # sign-ins started from the desktop window finish in the system browser
     ant_login = ai.AnthropicLogin()
     openrouter_flow = ai.OpenRouterConnect()
+    license_state = licensing.LicenseState(store, db)
+    app_state_license = license_state  # exposed below for tests and the desktop shell
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         reset = db.reset_stuck_items()
         if reset:
             log.info("Recovered %d item(s) interrupted by the last shutdown", reset)
-        if autostart and db.get_value("engine_running", False):
+        if autostart and db.get_value("engine_running", False) and license_state.current()[0]:
             await engine.start()
         yield
         if engine.running:
@@ -172,6 +193,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     app = FastAPI(title="clipped", version=config.APP_VERSION, lifespan=lifespan, docs_url="/api/docs",
                   redoc_url=None, openapi_url="/api/openapi.json")
     app.state.db, app.state.store, app.state.engine = db, store, engine
+    app.state.license = app_state_license
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):
@@ -179,9 +201,18 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         hostname = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
         if hostname not in hosts:
             return JSONResponse({"detail": "Host not allowed"}, status_code=403)
-        if request.method not in SAFE_METHODS and request.url.path.startswith("/api/"):
+        path = request.url.path
+        if request.method not in SAFE_METHODS and path.startswith("/api/"):
             if request.headers.get("x-clipped") != "1":
                 return JSONResponse({"detail": "Missing X-Clipped header"}, status_code=403)
+        # Everything that does work needs a licence. The welcome screen only needs these.
+        if (path.startswith(("/api/", "/media/")) and not path.startswith(LICENSE_FREE_PATHS)):
+            lic, problem = license_state.current()
+            if lic is None:
+                if engine.running:
+                    await engine.stop()
+                return JSONResponse({"detail": problem or "Enter your licence key to use clipped.",
+                                     "license_required": True}, status_code=402)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -218,6 +249,12 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         data["ffmpeg"] = bool(config.find_binary("ffmpeg"))
         data["auto_warning_acknowledged"] = db.get_global_settings().auto_warning_acknowledged_at is not None
         return data
+
+    @app.get("/api/activity")
+    def activity(days: int = 14):
+        days = max(1, min(days, 90))
+        rows = db.daily_activity(days, engine.tz)
+        return {"days": rows, "totals": {k: sum(r[k] for r in rows) for k in ("made", "uploaded", "views")}}
 
     @app.get("/api/about")
     def about():
@@ -299,6 +336,31 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             log.info("Auto mode responsibility notice acknowledged")
         return {"auto_warning_acknowledged": True}
 
+    # ------------------------------------------------------------------ licence
+    @app.get("/api/license")
+    def license_status():
+        lic, problem = license_state.current()
+        return {"licensed": lic is not None, "license": lic.to_dict(license_state.now()) if lic else None,
+                "problem": problem, "buy_url": licensing.BUY_URL}
+
+    @app.post("/api/license")
+    def license_activate(body: LicenseBody):
+        try:
+            lic = license_state.activate(body.key)
+        except licensing.LicenseError as exc:
+            raise HTTPException(400, str(exc)) from None
+        log.info("Licence activated (%s)", lic.plan)
+        return {"licensed": True, "license": lic.to_dict(license_state.now()), "problem": "",
+                "buy_url": licensing.BUY_URL}
+
+    @app.delete("/api/license")
+    async def license_remove():
+        if engine.running:
+            await engine.stop()
+        license_state.deactivate()
+        log.info("Licence removed from this computer")
+        return {"licensed": False, "license": None, "problem": "", "buy_url": licensing.BUY_URL}
+
     # ------------------------------------------------------------------ secrets
     @app.get("/api/secrets")
     def secrets_status():
@@ -306,7 +368,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
 
     @app.put("/api/secrets/{name}")
     def set_secret(name: str, body: SecretBody):
-        if name not in SECRET_NAMES or name == "youtube_refresh_token":
+        if name not in SECRET_NAMES or name in INTERNAL_SECRETS:
             raise HTTPException(404, "Unknown secret")
         store.set(name, body.value)
         if name.startswith("google_") or name.startswith("twitch_"):
@@ -315,7 +377,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
 
     @app.delete("/api/secrets/{name}")
     def delete_secret(name: str):
-        if name not in SECRET_NAMES:
+        if name not in SECRET_NAMES or name == "license_key":
             raise HTTPException(404, "Unknown secret")
         store.delete(name)
         return store.status()[name]
@@ -543,6 +605,53 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         db.save_global_settings(gs)
         return {"provider": body.provider, "settings": gs.model_dump(mode="json")}
 
+    # ------------------------------------------------------------------ instagram
+    def instagram_status() -> dict:
+        return {"connected": bool(store.get("instagram_access_token") and db.get_value("instagram_user_id")),
+                "username": db.get_value("instagram_username"), "problem": engine.instagram_problem,
+                "token_expires_at": db.get_value("instagram_token_expires_at"),
+                "enabled": db.get_global_settings().instagram.enabled}
+
+    @app.get("/api/instagram/status")
+    def instagram_get():
+        return instagram_status()
+
+    @app.post("/api/instagram/connect")
+    def instagram_connect(body: SecretBody):
+        token = body.value.strip()
+        try:
+            ig = instagram_factory(token)
+            try:
+                me = ig.me()
+                if str(me.get("account_type", "")).upper() not in ("", "BUSINESS", "MEDIA_CREATOR", "CREATOR"):
+                    raise HTTPException(400, "Reels can only be posted from an Instagram professional account "
+                                             "(Business or Creator). Switch it in the Instagram app, then try again.")
+                try:
+                    token, seconds = ig.refresh()  # also tells us when it expires
+                except InstagramError:
+                    seconds = 60 * 86400  # brand-new tokens can't be refreshed for a day; they last 60 days
+            finally:
+                ig.close()
+        except InstagramError as exc:
+            raise HTTPException(400, str(exc)) from None
+        store.set("instagram_access_token", token)
+        db.set_value("instagram_user_id", str(me["user_id"]))
+        db.set_value("instagram_username", me.get("username"))
+        db.set_value("instagram_token_expires_at", iso(utcnow() + timedelta(seconds=seconds)))
+        db.set_value("instagram_token_checked_at", iso(utcnow()))
+        engine.instagram_problem = ""
+        log.info("Instagram connected as @%s", me.get("username"))
+        return instagram_status()
+
+    @app.post("/api/instagram/disconnect")
+    def instagram_disconnect():
+        store.delete("instagram_access_token")
+        for key in ("instagram_user_id", "instagram_username", "instagram_token_expires_at"):
+            db.set_value(key, None)
+        engine.instagram_problem = ""
+        log.info("Instagram disconnected")
+        return instagram_status()
+
     @app.post("/api/youtube/disconnect")
     def youtube_disconnect():
         token = store.get("youtube_refresh_token")
@@ -666,8 +775,8 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             raise HTTPException(404, "Item not found")
         if item["status"] not in ("approved", "ready"):
             raise HTTPException(409, "Approve the clip first")
-        if not engine.youtube_ready():
-            raise HTTPException(400, "Connect YouTube first (Settings)")
+        if not engine.publish_ready():
+            raise HTTPException(400, "Connect YouTube or Instagram first, or download the Short and post it yourself.")
         engine.check_manual_upload()
         engine.run_now("net", engine.upload_item, item_id)
         return {"queued": True}
@@ -716,6 +825,21 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     @app.get("/media/items/{item_id}/video.mp4")
     def media_video(item_id: int):
         return _media(item_id, "video_path")
+
+    @app.get("/api/items/{item_id}/download")
+    def download_video(item_id: int):
+        """The finished Short as a file to save, named after its title."""
+        item = db.get_item(item_id)
+        if not item or not item["video_path"] or not Path(item["video_path"]).is_file():
+            raise HTTPException(404, "This Short has no video yet")
+        path = Path(item["video_path"]).resolve()
+        if config.data_dir().resolve() not in path.parents and not os.environ.get("CLIPPED_ALLOW_ANY_MEDIA"):
+            raise HTTPException(403, "Outside data directory")
+        return FileResponse(path, media_type="video/mp4", filename=download_name(item["title"]))
+
+    @app.post("/api/items/{item_id}/posted")
+    def mark_posted(item_id: int):
+        return item_view(engine.mark_posted(item_id))
 
     @app.get("/media/items/{item_id}/thumbnail.jpg")
     def media_thumb(item_id: int):

@@ -97,7 +97,8 @@ def main() -> int:
             check("JS bridge reaches the page",
                   wait(lambda: js("!!(window.pywebview && window.pywebview.api && window.pywebview.api.window_control)"), 40))
             check("custom title bar with window buttons", wait(lambda: js("!!document.querySelector('.titlebar .win-ctl .close')"), 40))
-            check("sticker rail", wait(lambda: js("document.querySelectorAll('.rail-item').length") == 7, 20))
+            # A fresh install has no licence: after the splash, the welcome screen asks for a key.
+            check("splash, then the licence screen", wait(lambda: js("!!document.querySelector('.gate .gate-key')"), 30))
             w32 = Win32() if WIN else None
             if w32:
                 check("found the window", w32.hwnd, hex(w32.hwnd))

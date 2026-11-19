@@ -1,7 +1,7 @@
 {
   "name": "clipped-dashboard",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,5 +20,6 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.11"
-  }
+  },
+  "license": "UNLICENSED"
 }

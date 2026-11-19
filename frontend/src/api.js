@@ -28,6 +28,8 @@ async function request(method, path, body, isForm = false) {
     data = text
   }
   if (!res.ok) {
+    // No (or no longer a) valid licence: the app goes back to the welcome screen.
+    if (res.status === 402 && data && data.license_required) window.dispatchEvent(new Event('clipped:license'))
     let detail = data && data.detail !== undefined ? data.detail : data
     if (Array.isArray(detail)) detail = detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ')
     throw new ApiError(res.status, detail || res.statusText)

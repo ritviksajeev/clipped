@@ -13,3 +13,7 @@ clipped/web/
 .DS_Store
 packaging/bin/
 clipped-output/
+
+# licence signing keys never go in the repo
+*.pem
+*signing-key*

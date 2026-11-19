@@ -23,7 +23,7 @@ export default function History() {
         <div className="table-wrap card glow">
           <table className="table">
             <thead>
-              <tr><th></th><th>Title</th><th>Streamer</th><th>Uploaded</th><th>Privacy</th><th className="num">Views</th><th className="num">Retention</th><th className="num">Likes</th><th>Style</th></tr>
+              <tr><th></th><th>Title</th><th>Posted to</th><th>When</th><th className="num">Views</th><th className="num">Retention</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => {
@@ -33,22 +33,21 @@ export default function History() {
                   <tr key={r.id}>
                     <td>{r.thumbnail_url ? <img className="mini-thumb" src={r.thumbnail_url} alt="" /> : null}</td>
                     <td className="title-cell">
-                      <a href={r.youtube_url} target="_blank" rel="noreferrer">{r.title}</a>
-                      <div className="q-meta" style={{ marginTop: 4 }}>{r.category_name} · {fmtDuration(r.duration)} · {r.mode}</div>
+                      <a href={r.youtube_url || r.instagram_url || undefined} target="_blank" rel="noreferrer">{r.title}</a>
+                      <div className="q-meta" style={{ marginTop: 4 }}>{r.streamer} · {r.category_name} · {fmtDuration(r.duration)}</div>
                     </td>
-                    <td>{r.streamer}</td>
-                    <td className="faint mono small">{fmtTime(r.uploaded_at)}</td>
                     <td>
-                      <span className={`chip ${locked ? 'wip' : privacy === 'public' ? 'live' : ''}`}
-                        title={locked ? 'YouTube locked this upload to private: see the API audit step in the YouTube guide' : ''}>
-                        {privacy}
-                      </span>
-                      {locked && <div style={{ marginTop: 4 }}><a className="link small" href="#/guides/youtube">why?</a></div>}
+                      <div className="chips">
+                        {r.youtube_url && <a className={`chip ${locked ? 'wip' : privacy === 'public' ? 'live' : ''}`} href={r.youtube_url} target="_blank" rel="noreferrer"
+                          title={locked ? 'YouTube locked this upload to private: see the API audit step in the YouTube guide' : privacy}>YouTube{privacy && privacy !== 'public' ? ` · ${privacy}` : ''}</a>}
+                        {r.instagram_url && <a className="chip live" href={r.instagram_url} target="_blank" rel="noreferrer">Instagram</a>}
+                        {r.posted_manually && <span className="chip">by hand</span>}
+                      </div>
+                      {locked && <div style={{ marginTop: 4 }}><a className="link small" href="#/guides/youtube">why private?</a></div>}
                     </td>
+                    <td className="faint mono small">{fmtTime(r.uploaded_at)}</td>
                     <td className="num">{fmtNum(r.stats?.views)}</td>
                     <td className="num">{r.stats?.avg_view_pct != null ? `${Math.round(r.stats.avg_view_pct)}%` : '-'}</td>
-                    <td className="num">{fmtNum(r.stats?.likes)}</td>
-                    <td><span className="chip">{r.title_style || '-'}</span></td>
                   </tr>
                 )
               })}

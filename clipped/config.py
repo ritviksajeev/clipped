@@ -15,7 +15,7 @@ from pathlib import Path
 from platformdirs import user_data_dir
 
 APP_NAME = "clipped"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.2.0"
 DEFAULT_PORT = 8000
 
 

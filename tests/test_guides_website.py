@@ -7,7 +7,7 @@ import pytest
 from clipped import config
 
 ROOT = Path(__file__).resolve().parent.parent
-GUIDE_SLUGS = {"quick-start", "twitch", "youtube", "ai-titles", "ffmpeg", "safety", "troubleshooting"}
+GUIDE_SLUGS = {"quick-start", "twitch", "youtube", "instagram", "ai-titles", "ffmpeg", "safety", "troubleshooting"}
 
 
 def test_bundled_guides_exist_and_cross_links_resolve():

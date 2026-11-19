@@ -240,9 +240,12 @@ def test_window_state_roundtrip(tmp_path, monkeypatch):
     assert desktop.load_window_state() == {"width": desktop.WINDOW_SIZE[0], "height": desktop.WINDOW_SIZE[1]}
     desktop.save_window_state(FakeWin())
     assert desktop.load_window_state() == {"width": 1300, "height": 820, "x": 40, "y": 60}
-    (tmp_path / "window.json").write_text('{"width": 200, "height": 99999, "x": -5000, "y": 3}', "utf-8")
+    (tmp_path / "window.json").write_text('{"v": 2, "width": 200, "height": 99999, "x": -5000, "y": 3}', "utf-8")
     state = desktop.load_window_state()
-    assert state["width"] == 980 and state["height"] == 3000 and "x" not in state  # clamped, off-screen dropped
+    assert state["width"] == 860 and state["height"] == 3000 and "x" not in state  # clamped, off-screen dropped
+    # A size saved by an older version (the old, much bigger default) is forgotten once
+    (tmp_path / "window.json").write_text('{"width": 1380, "height": 900, "x": 5, "y": 5}', "utf-8")
+    assert desktop.load_window_state() == {"width": 1120, "height": 720}
 
 
 def test_second_launch_brings_the_window_back(tmp_path, sample_clip):
@@ -291,7 +294,7 @@ def test_first_window_fits_small_screens():
     small = desktop.fit_to_screen(big, (1366, 768))
     assert small == {"width": 1326, "height": 708}  # fits, and the off-screen position is dropped
     tiny = desktop.fit_to_screen({"width": 1380, "height": 900}, (1024, 600))
-    assert tiny["width"] == 984 and tiny["height"] == 600  # never below the minimum unless the screen is smaller
+    assert tiny["width"] == 984 and tiny["height"] == 580  # never below the minimum unless the screen is smaller
     assert desktop.fit_to_screen({"width": 1200, "height": 800, "x": 10, "y": 10}, (1920, 1080))["x"] == 10
 
 

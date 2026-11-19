@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="theme-color" content="#09090b"/>
   <title>clipped: Twitch clips to captioned YouTube Shorts</title>
-  <meta name="description" content="clipped is a free, local-first app that finds popular Twitch clips, burns in word-by-word captions, reframes them to 9:16 and uploads them to YouTube Shorts with your own keys."/>
+  <meta name="description" content="clipped is a local-first app that finds popular Twitch clips, burns in word-by-word captions, reframes them to 9:16 and uploads them to YouTube Shorts with your own keys."/>
   <meta property="og:type" content="website"/>
   <meta property="og:title" content="clipped: Twitch clips to captioned YouTube Shorts"/>
-  <meta property="og:description" content="Free and local-first. Your keys, your machine, your channel."/>
+  <meta property="og:description" content="Local-first. Your keys, your machine, your channel. $2.99 a month or $32 for life."/>
   <meta property="og:image" content="assets/review.jpg"/>
   <meta name="twitter:card" content="summary_large_image"/>
   <script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
@@ -50,16 +50,16 @@
       <div class="warp" data-warp></div>
       <div class="wrap pd-grid">
         <div>
-          <div class="pd-crumb intro-fade" style="--id:0.3s"><span class="dot"></span>Free · open source · runs on your computer</div>
+          <div class="pd-crumb intro-fade" style="--id:0.3s"><span class="dot"></span>Runs on your computer · $2.99/mo or $32 for life</div>
           <h1 class="pd-title"><span class="line-mask"><span class="line">clipped</span></span><span class="pd-stk" data-sticker></span></h1>
           <p class="pd-tag intro-fade" style="--id:0.55s">Clips to shorts, <span class="accent">on <span data-flip="autopilot.|repeat.|your terms.">autopilot.</span></span></p>
           <div class="chips intro-fade" style="--id:0.7s">
-            <span class="chip accent">v0.1.1</span><span class="chip">Python 3.11+</span><span class="chip">Windows · macOS · Linux</span><span class="chip">MIT</span>
+            <span class="chip accent">v0.2.0</span><span class="chip">Python 3.11+</span><span class="chip">Windows · macOS · Linux</span><span class="chip">$32 lifetime</span>
           </div>
           <p class="pd-lead intro-fade" style="--id:0.8s">clipped finds the hottest clips in any Twitch category, burns in <b>word-by-word captions</b>, reframes them to 9:16, writes the title, <b>credits the streamer</b> and uploads to <em>your</em> YouTube channel. Approve each one, or let it run on a schedule.</p>
           <div class="pd-cta intro-fade" style="--id:0.95s">
             <a class="btn shine big" id="hero-download" href="#download" data-magnetic="0.15">
-              <span class="btn-col"><span id="hero-download-label">Download clipped</span><small>free · no account · your keys</small></span>
+              <span class="btn-col"><span id="hero-download-label">Download clipped</span><small>needs a licence key · your keys stay yours</small></span>
               <span class="arrow">&rarr;</span>
             </a>
             <a class="btn ghost big" href="#pipeline" data-magnetic="0.15">How it works <span class="arrow">&darr;</span></a>
@@ -168,7 +168,7 @@
               <div class="spec-row"><dt class="k">Dashboard</dt><dd class="v">localhost only</dd></div>
               <div class="spec-row"><dt class="k">Talks to</dt><dd class="v">Twitch, Google, your AI provider</dd></div>
               <div class="spec-row"><dt class="k">Telemetry</dt><dd class="v">None</dd></div>
-              <div class="spec-row"><dt class="k">Price</dt><dd class="v">Free · MIT</dd></div>
+              <div class="spec-row"><dt class="k">Price</dt><dd class="v">$2.99 a month or $32 for life · <a href="https://evzero.org/clipped/buy/">get a key</a></dd></div>
             </dl>
           </div>
         </div>
@@ -205,7 +205,7 @@ clipped        # opens the app window</code></pre></div>
       <div class="wrap">
         <div class="kicker"><span class="k-idx"><span class="dot"></span>(06)</span><span class="k-name">Setup</span><span class="k-line"></span><span class="k-meta">about 15 minutes</span></div>
         <div class="sec-head">
-          <h2 class="sec-title" data-split>Three steps, <span class="accent">all free.</span></h2>
+          <h2 class="sec-title" data-split>Three steps, <span class="accent">done once.</span></h2>
           <div class="sec-aside reveal d2">Bring your own Twitch and Google keys. The guides walk through every click, including the Google Cloud project.</div>
         </div>
         <div class="steps">
@@ -221,7 +221,7 @@ clipped        # opens the app window</code></pre></div>
       <div class="wrap">
         <div class="kicker"><span class="k-idx"><span class="dot"></span>(07)</span><span class="k-name">FAQ</span><span class="k-line"></span><span class="k-meta">the honest bits</span></div>
         <div class="faq">
-          <details class="glow reveal"><summary>Is it really free?</summary><p>Yes. clipped is MIT-licensed, the Twitch and YouTube APIs are free, and transcription runs on your computer. AI-written titles are optional and billed by your own Anthropic or OpenAI account; the free templates work without them.</p></details>
+          <details class="glow reveal"><summary>What does it cost?</summary><p>$2.99 a month or $32 once for life, at <a href="https://evzero.org/clipped/buy/">evzero.org/clipped/buy</a>. The Twitch, YouTube and Instagram APIs are free, and transcription runs on your computer. AI titles are optional and billed by the AI you choose (Gemini and Ollama are free).</p></details>
           <details class="glow reveal d1"><summary>Why are my first uploads private?</summary><p>YouTube locks uploads from API projects that haven't passed its free compliance audit to private. clipped detects this and links the audit form; until then you can flip videos to Public in YouTube Studio. <a href="guides/youtube.html">Details</a></p></details>
           <details class="glow reveal d2"><summary>How many Shorts a day?</summary><p>A new Google Cloud project gets 10,000 API units a day, about six uploads. clipped tracks the quota, stops before it runs out and resumes after the daily reset.</p></details>
           <details class="glow reveal d3"><summary>Do you see my keys or videos?</summary><p>No. There is no clipped server. Keys live in your operating system's keychain and only ever go to the service they belong to.</p></details>
@@ -236,7 +236,7 @@ clipped        # opens the app window</code></pre></div>
       <div class="footer-top">
         <div>
           <h2 class="footer-title" data-split>Start <span class="accent">clipping.</span></h2>
-          <p class="footer-sub reveal d1">Free, open source, and yours. Download it, plug in your keys, press the big button.</p>
+          <p class="footer-sub reveal d1">Get a key, download it, plug in your keys, press the big button.</p>
           <div class="footer-actions reveal d2">
             <a href="#download" class="btn shine" data-magnetic>Download <span class="arrow">&rarr;</span></a>
             <a href="https://github.com/ritviksajeev/clipped" class="btn ghost" data-magnetic target="_blank" rel="noopener">Source on GitHub <span class="arrow">&rarr;</span></a>
@@ -253,7 +253,7 @@ clipped        # opens the app window</code></pre></div>
         <span class="stk a" data-sticker></span><span class="stk b" data-sticker></span>
       </div>
       <div class="footer-bottom">
-        <span>© clipped · MIT</span>
+        <span>© evzero · all rights reserved</span>
         <span>Not affiliated with Twitch, YouTube or Google</span>
         <a href="https://evzero.org" target="_blank" rel="noopener">Built by evzero ↗</a>
       </div>

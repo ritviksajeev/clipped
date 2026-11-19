@@ -35,7 +35,11 @@ SECRET_NAMES = {
     "openai_api_key": "OpenAI API key",
     "gemini_api_key": "Google Gemini API key",
     "openrouter_api_key": "OpenRouter key (set by Connect OpenRouter)",
+    "instagram_access_token": "Instagram access token",
+    "license_key": "clipped licence key (set on the welcome screen)",
 }
+# Kept out of the Settings secrets API: set and checked only through /api/license.
+INTERNAL_SECRETS = {"youtube_refresh_token", "license_key"}
 
 
 class FileSecretBackend:
@@ -160,6 +164,8 @@ class KeyStore:
     def status(self) -> dict[str, dict]:
         result = {}
         for name, label in SECRET_NAMES.items():
+            if name == "license_key":
+                continue  # shown on the welcome screen, never in Settings
             value = self.get(name)
             result[name] = {
                 "label": label,

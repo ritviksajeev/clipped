@@ -20,6 +20,7 @@ window says goodbye or stops checking in.
 from __future__ import annotations
 
 import json
+import re
 import os
 import secrets
 import shutil
@@ -31,14 +32,17 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+import httpx
+
 from . import config
 from .logs import get_logger
 from .proc import hidden
 
 log = get_logger("desktop")
 
-WINDOW_SIZE = (1380, 900)
-MIN_SIZE = (980, 640)
+WINDOW_SIZE = (1120, 720)  # a medium window; it remembers whatever size you give it
+MIN_SIZE = (860, 580)
+STATE_VERSION = 2  # bump to reset everyone's saved size once (v0.2 shrank the default)
 IDLE_TIMEOUT = 150.0  # seconds without a heartbeat before we assume the window is gone
 AWAY_TIMEOUT = 15 * 60.0  # the window said it is busy elsewhere (e.g. a sign-in popup)
 BYE_GRACE = 8.0  # a reload also says goodbye; wait for the page to come back
@@ -214,6 +218,8 @@ def window_state_path() -> Path:
 def load_window_state() -> dict:
     try:
         data = json.loads(window_state_path().read_text("utf-8"))
+        if data.get("v") != STATE_VERSION:
+            raise ValueError("saved by an older version")
         w, h = int(data["width"]), int(data["height"])
         state = {"width": max(MIN_SIZE[0], min(w, 4000)), "height": max(MIN_SIZE[1], min(h, 3000))}
         if isinstance(data.get("x"), int) and isinstance(data.get("y"), int) and data["x"] > -200 and data["y"] > -50:
@@ -247,7 +253,8 @@ def fit_to_screen(state: dict, screen: tuple[int, int] | None) -> dict:
 
 def save_window_state(win) -> None:
     try:
-        state = {"width": int(win.width), "height": int(win.height), "x": int(win.x), "y": int(win.y)}
+        state = {"v": STATE_VERSION, "width": int(win.width), "height": int(win.height), "x": int(win.x),
+                 "y": int(win.y)}
         window_state_path().write_text(json.dumps(state), "utf-8")
     except Exception:  # best effort: a missing size is not worth an error
         pass
@@ -260,10 +267,41 @@ class _Bridge:
     the page as well.
     """
 
-    def __init__(self, on_close) -> None:
+    def __init__(self, on_close, base_url: str = "") -> None:
         self._window = None
         self._maximized = False
         self._on_close = on_close
+        self._base = base_url.rstrip("/")  # the local server, e.g. http://127.0.0.1:8000
+
+    def save_video(self, item_id, filename="clipped short.mp4") -> dict:
+        """Save a finished Short through Windows' Save dialog (downloads are off in the embedded browser)."""
+        win = self._window
+        try:
+            item_id = int(item_id)
+        except (TypeError, ValueError):
+            return {"saved": False}
+        if win is None or not self._base:
+            return {"saved": False}
+        import webview
+
+        name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", str(filename or "")).strip(" .")[:90] or "clipped short"
+        if not name.lower().endswith(".mp4"):
+            name += ".mp4"
+        kind = webview.FileDialog.SAVE if hasattr(webview, "FileDialog") else webview.SAVE_DIALOG
+        chosen = win.create_file_dialog(kind, save_filename=name, file_types=("MP4 video (*.mp4)",))
+        if not chosen:
+            return {"saved": False}
+        dest = Path(chosen if isinstance(chosen, str) else chosen[0])
+        try:
+            with httpx.stream("GET", f"{self._base}/api/items/{item_id}/download", timeout=60.0) as resp:
+                if resp.status_code != 200:
+                    return {"saved": False, "error": f"HTTP {resp.status_code}"}
+                with dest.open("wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        fh.write(chunk)
+        except (httpx.HTTPError, OSError) as exc:
+            return {"saved": False, "error": str(exc)}
+        return {"saved": True, "path": str(dest)}
 
     def open_url(self, url: str) -> bool:
         if isinstance(url, str) and url.startswith("https://"):
@@ -403,7 +441,10 @@ def run_native(url: str, session: "AppSession | None" = None, keep_running=lambd
         return True
 
     tray = Tray(on_show=show, on_quit=quit_app)
-    bridge = _Bridge(on_close=request_close)
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    bridge = _Bridge(on_close=request_close, base_url=f"{parts.scheme}://{parts.netloc}")
     geometry = fit_to_screen(load_window_state(), primary_screen(webview))
     win = webview.create_window(
         "clipped", url, min_size=MIN_SIZE, frameless=True, easy_drag=False, background_color="#09090b",

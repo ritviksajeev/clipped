@@ -182,6 +182,11 @@ class YouTubeSettings(BaseModel):
     contains_synthetic_media: bool = False
 
 
+class InstagramSettings(BaseModel):
+    enabled: bool = True  # post Reels whenever an Instagram token is saved
+    share_to_feed: bool = True  # also show the Reel on the profile grid
+
+
 class GlobalSettings(BaseModel):
     mode: Literal["manual", "auto"] = "manual"
     auto_warning_acknowledged_at: Optional[datetime] = None
@@ -197,6 +202,7 @@ class GlobalSettings(BaseModel):
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
     render: RenderSettings = Field(default_factory=RenderSettings)
     youtube: YouTubeSettings = Field(default_factory=YouTubeSettings)
+    instagram: InstagramSettings = Field(default_factory=InstagramSettings)
     commentary_default: str = ""
 
     @field_validator("approved_streamers")

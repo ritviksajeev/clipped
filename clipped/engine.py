@@ -32,6 +32,7 @@ from .pipeline.transcribe import Transcriber, WhisperTranscriber
 from .services import ai
 from .services.quota import QuotaTracker
 from .services.twitch import TwitchClient, TwitchError
+from .services.instagram import InstagramAuthError, InstagramClient, InstagramError, build_caption
 from .services.youtube import AuthError, QuotaExceeded, UploadRequest, YouTubeClient, YouTubeError
 
 log = get_logger("engine")
@@ -59,6 +60,7 @@ class Engine:
                  twitch_factory: Callable[[], TwitchClient] | None = None,
                  youtube_factory: Callable[[], YouTubeClient] | None = None,
                  transcriber_factory: Callable[[GlobalSettings], Transcriber] | None = None,
+                 instagram_factory: Callable[[], InstagramClient] | None = None,
                  clock: Callable[[], datetime] = utcnow, tz: tzinfo | None = None,
                  work_root: Path | None = None) -> None:
         self.db = db
@@ -69,6 +71,8 @@ class Engine:
         self.work_root = work_root or config.work_dir()
         self._twitch_factory = twitch_factory or (lambda: TwitchClient.from_keystore(self.store))
         self._youtube_factory = youtube_factory or (lambda: YouTubeClient.from_keystore(self.store, quota=self.quota))
+        self._instagram_factory = instagram_factory or (lambda: InstagramClient(self.store.get("instagram_access_token")))
+        self.instagram_problem = ""
         self._transcriber_factory = transcriber_factory or self._default_transcriber
         self._transcriber: tuple[tuple, Transcriber] | None = None
         self.running = False
@@ -176,6 +180,15 @@ class Engine:
         return bool(self.store.get("youtube_refresh_token") and self.store.get("google_client_id")
                     and self.store.get("google_client_secret")) and not self.auth_problem
 
+    def instagram_ready(self, gs: GlobalSettings | None = None) -> bool:
+        gs = gs or self.settings()
+        return bool(gs.instagram.enabled and self.store.get("instagram_access_token")
+                    and self.db.get_value("instagram_user_id")) and not self.instagram_problem
+
+    def publish_ready(self) -> bool:
+        """Somewhere to post: YouTube, Instagram or both. Without either, Shorts are downloaded by hand."""
+        return self.youtube_ready() or self.instagram_ready()
+
     def recent_for_diversity(self, window: int) -> list[dict]:
         rows = self.db.list_items(["uploaded"], limit=window, order="uploaded_at DESC")
         pending = self.db.list_items(["approved", "ready", "uploading"], limit=window)
@@ -192,6 +205,7 @@ class Engine:
     # ------------------------------------------------------------------ network worker
     def network_step(self) -> None:
         self.fetch_due()
+        self.refresh_instagram_token_due()
         self.upload_due()
         self.refresh_stats_due()
 
@@ -350,7 +364,7 @@ class Engine:
         return {"item": item, "kind": kind, "at": slot.at, "reason": slot.reason}
 
     def upload_due(self) -> dict | None:
-        if not self.youtube_ready():
+        if not self.publish_ready():
             return None
         nxt = self.next_upload()
         if not nxt or nxt["at"] > self.clock():
@@ -361,22 +375,31 @@ class Engine:
         """Upload now is the user's own call, so clipped's pacing (the daily cap and the
         minimum gap) doesn't apply; those only space out scheduled uploads. YouTube's
         quota still does, because YouTube enforces it whatever we do."""
-        if not self.quota.can_spend("videos.insert"):
+        if not self.publish_ready():
+            raise EngineError("Connect YouTube or Instagram first, or download the Short and post it yourself.")
+        if self.youtube_ready() and not self.instagram_ready() and not self.quota.can_spend("videos.insert"):
             reset = self.quota.reset_at().astimezone(self.tz).strftime("%H:%M")
             raise EngineError(f"YouTube's upload quota for today is used up. It resets at {reset}.")
 
     def upload_item(self, item_id: int) -> dict | None:
+        """Post an approved Short to every connected platform (YouTube, Instagram or both)."""
         gs = self.settings()
         item = self.db.get_item(item_id)
         if not item or item["status"] not in ("approved", "ready"):
             raise EngineError("Only approved or ready clips can be uploaded")
+        to_youtube = self.youtube_ready() and not item["youtube_id"]
+        to_instagram = self.instagram_ready(gs) and not item["instagram_id"]
+        if not to_youtube and not to_instagram:
+            raise EngineError("Connect YouTube or Instagram first, or download the Short from Review and post it yourself.")
         if item["needs_rerender"]:
             self.rerender_item(item_id)
             item = self.db.get_item(item_id)
-        if not self.quota.can_spend("videos.insert"):
+        if to_youtube and not self.quota.can_spend("videos.insert"):
             self.db.set_value("quota_paused_until", iso(self.quota.reset_at()))
             log.warning("YouTube quota for today is used up; uploads resume after %s", self.quota.reset_at())
-            return None
+            if not to_instagram:
+                return None
+            to_youtube = False  # Instagram can still go now; YouTube follows after the reset
         clip_row = self.db.get_clip(item["clip_id"])
         clip = clip_row["clip"] if clip_row else ClipInfo(id=item["clip_id"], broadcaster_name=item["streamer"])
         title, description = metadata.ensure_credit(item["title"], item["description"], clip,
@@ -385,57 +408,144 @@ class Engine:
         self.db.update_item(item_id, status="uploading", title=title, description=description)
         self.activity["net"] = f"Uploading: {title[:60]}"
         self.upload_progress[item_id] = 0.0
+        result = None
+        try:
+            if to_youtube:
+                result = self._upload_youtube(item, gs, clip, title, description, previous)
+                if result is None and not to_instagram:
+                    return None  # already put back with a retry time or marked failed
+            reel, ig_error = None, ""
+            if to_instagram:
+                reel, ig_error = self._upload_instagram(item, gs, title, description)
+                if reel is None and result is None:
+                    self._retry_later(item, previous, ig_error)
+                    return None
+        finally:
+            self.upload_progress.pop(item_id, None)
+
+        now = self.clock()
+        fields = {"status": "uploaded", "uploaded_at": now, "next_attempt_at": None}
+        warnings = list(result.warnings) if result else []
+        if result:
+            fields.update(youtube_id=result.video_id, privacy_requested=gs.youtube.privacy_status,
+                          privacy_actual=result.privacy_status)
+            self.db.set_value("quota_paused_until", None)
+            log.info("Published %s (%s)", result.url, result.privacy_status)
+        if reel:
+            fields.update(instagram_id=reel.media_id, instagram_url=reel.permalink)
+            log.info("Posted to Instagram: %s", reel.permalink or reel.media_id)
+        if ig_error:
+            warnings.append(f"Instagram: {ig_error}")
+        fields["error"] = "; ".join(warnings)
+        self.db.update_item(item_id, **fields)
+        for warning in warnings:
+            log.warning("%s", warning)
+        if item["workdir"]:
+            for path in Path(item["workdir"]).glob("source.*"):
+                path.unlink(missing_ok=True)  # keep the rendered Short, drop the original download
+        return {"youtube_id": result.video_id if result else "", "url": result.url if result else "",
+                "privacy": result.privacy_status if result else "", "warnings": warnings,
+                "instagram_id": reel.media_id if reel else "", "instagram_url": reel.permalink if reel else ""}
+
+    def _retry_later(self, item: dict, previous: str, error: str, permanent: bool = False) -> None:
+        attempts = item["attempts"] + 1
+        if permanent or attempts >= MAX_UPLOAD_ATTEMPTS:
+            self.db.update_item(item["id"], status="failed", error=error, attempts=attempts)
+            log.error("Upload failed permanently: %s", error)
+        else:
+            retry_at = self.clock() + timedelta(minutes=5 * 2 ** (attempts - 1))
+            self.db.update_item(item["id"], status=previous, error=error, attempts=attempts, next_attempt_at=retry_at)
+            log.warning("Upload failed (%s); retrying at %s", error, retry_at.astimezone(self.tz).strftime("%H:%M"))
+
+    def _upload_youtube(self, item: dict, gs: GlobalSettings, clip: ClipInfo, title: str, description: str,
+                        previous: str):
+        item_id = item["id"]
         try:
             yt = self._youtube_factory()
             try:
-                result = yt.upload(UploadRequest(
+                return yt.upload(UploadRequest(
                     video_path=Path(item["video_path"]), title=title, description=description, tags=item["tags"],
                     privacy_status=gs.youtube.privacy_status, made_for_kids=gs.youtube.made_for_kids,
                     category_id=gs.youtube.category_id,
                     thumbnail_path=Path(item["thumbnail_path"]) if gs.youtube.set_thumbnail and item["thumbnail_path"] else None,
                     contains_synthetic_media=gs.youtube.contains_synthetic_media,
                     default_language=(clip.language or "")[:2],
-                ), progress=lambda p: self.upload_progress.__setitem__(item_id, p))
+                ), progress=lambda p: self.upload_progress.__setitem__(item_id, p * 0.5 if self.instagram_ready() else p))
             finally:
                 yt.close()
         except QuotaExceeded as exc:
             self.db.update_item(item_id, status=previous)
             self.db.set_value("quota_paused_until", iso(self.quota.reset_at()))
             log.warning("%s - uploads paused until the quota resets (%s)", exc, self.quota.reset_at())
-            return None
         except AuthError as exc:
             self.db.update_item(item_id, status=previous)
             self.auth_problem = str(exc)
             log.error("YouTube auth problem: %s", exc)
-            return None
         except (YouTubeError, OSError) as exc:
-            attempts = item["attempts"] + 1
-            permanent = isinstance(exc, YouTubeError) and exc.status in (400, 403, 404)
-            if permanent or attempts >= MAX_UPLOAD_ATTEMPTS:
-                self.db.update_item(item_id, status="failed", error=str(exc), attempts=attempts)
-                log.error("Upload failed permanently: %s", exc)
-            else:
-                retry_at = self.clock() + timedelta(minutes=5 * 2 ** (attempts - 1))
-                self.db.update_item(item_id, status=previous, error=str(exc), attempts=attempts,
-                                    next_attempt_at=retry_at)
-                log.warning("Upload failed (%s); retrying at %s", exc, retry_at.astimezone(self.tz).strftime("%H:%M"))
-            return None
-        finally:
-            self.upload_progress.pop(item_id, None)
+            self._retry_later(item, previous, str(exc),
+                              permanent=isinstance(exc, YouTubeError) and exc.status in (400, 403, 404))
+        return None
 
+    def _upload_instagram(self, item: dict, gs: GlobalSettings, title: str, description: str):
+        """(reel, error). An auth problem stops Instagram posting until a new token is saved."""
+        item_id = item["id"]
+        offset = (item.get("analysis") or {}).get("thumbnail_at")
+        try:
+            ig = self._instagram_factory()
+            try:
+                reel = ig.publish_reel(
+                    str(self.db.get_value("instagram_user_id")), Path(item["video_path"]), build_caption(title, description),
+                    share_to_feed=gs.instagram.share_to_feed, thumb_offset_ms=int(offset * 1000) if offset else None,
+                    progress=lambda p: self.upload_progress.__setitem__(item_id, 0.5 + p * 0.5 if self.youtube_ready() else p))
+            finally:
+                ig.close()
+            return reel, ""
+        except InstagramAuthError as exc:
+            self.instagram_problem = str(exc)
+            log.error("Instagram: %s", exc)
+            return None, str(exc)
+        except (InstagramError, OSError) as exc:
+            return None, str(exc)
+
+    def refresh_instagram_token_due(self) -> None:
+        """Long-lived Instagram tokens last 60 days; swap for a fresh one when under 20 are left."""
+        token = self.store.get("instagram_access_token")
+        if not token:
+            return
+        expires = parse_dt(self.db.get_value("instagram_token_expires_at"))
+        checked = parse_dt(self.db.get_value("instagram_token_checked_at"))
         now = self.clock()
-        self.db.update_item(item_id, status="uploaded", youtube_id=result.video_id, uploaded_at=now,
-                            privacy_requested=gs.youtube.privacy_status, privacy_actual=result.privacy_status,
-                            error="; ".join(result.warnings), next_attempt_at=None)
-        self.db.set_value("quota_paused_until", None)
-        for warning in result.warnings:
-            log.warning("%s", warning)
-        if item["workdir"]:
-            for path in Path(item["workdir"]).glob("source.*"):
-                path.unlink(missing_ok=True)  # keep the rendered Short, drop the original download
-        log.info("Published %s (%s)", result.url, result.privacy_status)
-        return {"youtube_id": result.video_id, "url": result.url, "privacy": result.privacy_status,
-                "warnings": result.warnings}
+        if checked and now - checked < timedelta(hours=24):
+            return
+        self.db.set_value("instagram_token_checked_at", iso(now))
+        if expires and expires - now > timedelta(days=20):
+            return
+        try:
+            ig = InstagramClient(token)
+            try:
+                fresh, seconds = ig.refresh()
+            finally:
+                ig.close()
+        except InstagramAuthError as exc:
+            self.instagram_problem = str(exc)
+            log.error("Instagram: %s", exc)
+            return
+        except InstagramError as exc:
+            log.warning("Couldn't refresh the Instagram token yet (%s); trying again tomorrow", exc)
+            return
+        self.store.set("instagram_access_token", fresh)
+        if seconds:
+            self.db.set_value("instagram_token_expires_at", iso(now + timedelta(seconds=seconds)))
+        log.info("Refreshed the Instagram access token")
+
+    def mark_posted(self, item_id: int) -> dict:
+        """The user downloaded the Short and posted it themselves."""
+        item = self.db.get_item(item_id)
+        if not item or item["status"] not in ("review", "approved", "ready", "failed"):
+            raise EngineError("Only Shorts waiting to go up can be marked as posted")
+        log.info("Marked “%s” as posted by hand", item["title"][:60])
+        return self.db.update_item(item_id, status="uploaded", uploaded_at=self.clock(), posted_manually=True,
+                                   approved_at=item["approved_at"] or self.clock(), error="", next_attempt_at=None)
 
     # ------------------------------------------------------------------ analytics
     def refresh_stats_due(self, force: bool = False) -> int:
@@ -729,7 +839,7 @@ class Engine:
     # ------------------------------------------------------------------ status
     def status(self) -> dict:
         gs = self.settings()
-        nxt = self.next_upload(gs) if self.youtube_ready() else None
+        nxt = self.next_upload(gs) if self.publish_ready() else None
         now = self.clock()
         paused = gs.schedule.pause_until and gs.schedule.pause_until.astimezone(timezone.utc) > now
         quiet = timing.in_quiet_hours(now, gs.schedule.quiet_hours, self.tz)
@@ -761,6 +871,10 @@ class Engine:
             "twitch_configured": self.twitch_ready(),
             "youtube_connected": bool(self.store.get("youtube_refresh_token")),
             "youtube_channel": self.db.get_value("youtube_channel"),
+            "instagram_connected": bool(self.store.get("instagram_access_token") and self.db.get_value("instagram_user_id")),
+            "instagram_user": self.db.get_value("instagram_username"),
+            "instagram_problem": self.instagram_problem,
+            "download_only": not self.publish_ready(),
             "auth_problem": self.auth_problem,
             "last_error": self.last_error,
             "uploads_today": self.uploads_on_day(now),

@@ -1,7 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { api, fmtDuration, fmtTime, hasNativeWindow, nativeApi, windowControl } from './api.js'
-import { useNow } from './fx.js'
+import { api, hasNativeWindow, nativeApi, windowControl } from './api.js'
 import { Sticker } from './stickers.jsx'
+import Splash from './shell/Splash.jsx'
+import Gate from './shell/Gate.jsx'
+import Home from './shell/Home.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Review from './pages/Review.jsx'
 import History from './pages/History.jsx'
@@ -15,9 +17,9 @@ export const NAV = [
   { key: 'dashboard', label: 'Dashboard', note: 'engine', r: -7 },
   { key: 'review', label: 'Review', note: 'the queue', r: 5 },
   { key: 'categories', label: 'Categories', note: 'your games', r: -4 },
+  { key: 'settings', label: 'Settings', note: 'tune it', r: 4 },
   { key: 'history', label: 'History', note: 'uploads', r: 6 },
   { key: 'insights', label: 'Insights', note: 'what works', r: -5 },
-  { key: 'settings', label: 'Settings', note: 'tune it', r: 4 },
   { key: 'guides', label: 'Guides', note: 'set up', r: -3 },
 ]
 const PAGES = { dashboard: Dashboard, review: Review, history: History, insights: Insights,
@@ -26,11 +28,12 @@ const PAGES = { dashboard: Dashboard, review: Review, history: History, insights
 export const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
+// '#/' (or nothing) is home, the sticker menu. Everything else is a page.
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '')
   const [path, query = ''] = raw.split('?')
-  const [page = 'dashboard', ...rest] = path.split('/')
-  return { page: PAGES[page] ? page : 'dashboard', sub: rest.join('/'), params: new URLSearchParams(query) }
+  const [page = '', ...rest] = path.split('/')
+  return { page: PAGES[page] ? page : 'home', sub: rest.join('/'), params: new URLSearchParams(query) }
 }
 
 export function engineState(status) {
@@ -39,38 +42,49 @@ export function engineState(status) {
 }
 export const STATE_LABEL = { stopped: 'Stopped', idle: 'Running', working: 'Working', paused: 'Paused', offline: 'Offline' }
 
-// ---------------------------------------------------------------- title bar
+// ---------------------------------------------------------------- top bar
 
 function Icon({ d, size = 10 }) {
   return <svg width={size} height={size} viewBox="0 0 10 10" fill="none" aria-hidden="true">{d}</svg>
 }
 
-function TitleBar({ status, page, menuOpen, onMenu, native, maxed, setMaxed }) {
+// One slim bar, part of the window rather than a header on top of it. At home it is
+// just the mark and the window buttons; on a page it adds where you are and a way back.
+function TopBar({ page, status, phase, onEngine, engineBusy, native, maxed, setMaxed }) {
   const state = engineState(status)
   const nav = NAV.find((n) => n.key === page)
-  // pywebview drags the window from elements with this class. A maximised
-  // window is not dragged: double-click (or the button) restores it first.
+  const atHome = phase !== 'app' || page === 'home'
   const drag = native && !maxed ? 'pywebview-drag-region' : ''
   return (
-    <header className={`titlebar ${drag}`} onDoubleClick={(e) => {
-      if (native && (e.target === e.currentTarget || e.target.classList.contains('tb-space') || e.target.classList.contains('brand-word') || e.target.classList.contains('tb-crumb'))) {
+    <header className={`titlebar ${atHome ? 'at-home' : ''} ${drag}`} onDoubleClick={(e) => {
+      if (native && (e.target === e.currentTarget || e.target.classList.contains('tb-space'))) {
         windowControl('toggle_maximize'); setMaxed((m) => !m)
       }
     }}>
-      <a href="#/dashboard" className="brand" aria-label="clipped dashboard">
-        <span className="brand-stk"><Sticker name="clipped" /></span>
-        <span className={`brand-word ${drag}`}>clipped<i /></span>
-      </a>
-      <span className={`tb-crumb ${drag}`}>/ {nav?.label.toLowerCase()}</span>
+      {phase === 'app' && !atHome ? (
+        <a href="#/" className="tb-home" aria-label="Back to the menu" title="Menu (Esc)">
+          <span className="tb-back" aria-hidden="true">←</span>
+          <span className="tb-stk"><Sticker name={page} /></span>
+          <span className="tb-title">{nav?.label}</span>
+        </a>
+      ) : (
+        <span className={`tb-brand ${drag}`}>
+          <span className="tb-stk"><Sticker name="clipped" /></span>
+          <span className="tb-word">clipped<i /></span>
+        </span>
+      )}
       <span className={`tb-space ${drag}`} />
-      <a href="#/dashboard" className={`state-pill ${status?.running ? (state === 'paused' ? 'paused' : 'on') : 'off'}`}
-        title={status?.running ? 'Engine running' : 'Engine stopped'}>
-        <span className="led" /><span>{STATE_LABEL[state] || state}</span>
-      </a>
-      <button className={`menu-btn ${menuOpen ? 'open' : ''}`} type="button" aria-expanded={menuOpen} aria-controls="app-menu" onClick={onMenu}>
-        <span>{menuOpen ? 'Close' : 'Menu'}</span>
-        <span className="menu-btn-dots" aria-hidden="true"><i /><i /><i /><i /></span>
-      </button>
+      {phase === 'app' && status && !status.offline && (
+        <button type="button" className={`state-pill ${status.running ? (state === 'paused' ? 'paused' : 'on') : 'off'}`}
+          onClick={onEngine} disabled={engineBusy} title={status.running ? 'Stop the engine' : 'Start the engine'}>
+          <span className="led" /><span>{STATE_LABEL[state] || state}</span>
+        </button>
+      )}
+      {phase === 'app' && !atHome && (
+        <a className="menu-btn" href="#/" aria-label="Menu">
+          <span>Menu</span><span className="menu-btn-dots" aria-hidden="true"><i /><i /><i /><i /></span>
+        </a>
+      )}
       {native && (
         <div className="win-ctl">
           <button type="button" aria-label="Minimise" onClick={() => windowControl('minimize')}>
@@ -140,126 +154,14 @@ function ResizeHandles() {
   )
 }
 
-// ---------------------------------------------------------------- sticker rail
-
-function Rail({ page, status, onEngine, busy }) {
-  const review = status?.items?.review || 0
-  const failed = status?.items?.failed || 0
-  return (
-    <nav className="rail" aria-label="Sections">
-      <div className="rail-list">
-        {NAV.map((n, i) => {
-          const badge = n.key === 'review' ? review : 0
-          return (
-            <a key={n.key} href={`#/${n.key}`} className={`rail-item ${page === n.key ? 'active' : ''}`}
-              style={{ '--r': `${n.r}deg`, '--i': i }} aria-label={n.label} aria-current={page === n.key ? 'page' : undefined}>
-              <Sticker name={n.key} />
-              {badge > 0 && <span className="rail-badge" key={badge}>{badge}</span>}
-              {n.key === 'review' && !badge && failed > 0 && <span className="rail-badge warn">!</span>}
-              <span className="tip">{n.label}<small>{n.note}</small></span>
-            </a>
-          )
-        })}
-      </div>
-      <button type="button" className={`rail-engine ${status?.running ? 'on' : ''}`} onClick={onEngine} disabled={busy || !status || status.offline}
-        aria-label={status?.running ? 'Stop the engine' : 'Start the engine'}>
-        <span className="rail-engine-ring" aria-hidden="true" />
-        <Sticker name="power" />
-        <span className="tip">{status?.running ? 'Stop engine' : 'Start engine'}<small>{status?.running ? 'running' : 'stopped'}</small></span>
-      </button>
-    </nav>
-  )
-}
-
-// ---------------------------------------------------------------- the sticker menu (evzero.org style)
-
-function Menu({ open, page, status, onClose, onEngine }) {
-  const first = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    const t = setTimeout(() => first.current?.focus({ preventScroll: true }), 450)
-    return () => clearTimeout(t)
-  }, [open])
-  const review = status?.items?.review || 0
-  const main = NAV.filter((n) => ['dashboard', 'review', 'categories', 'settings'].includes(n.key))
-  const sub = NAV.filter((n) => ['history', 'insights', 'guides'].includes(n.key))
-  const item = (n, i, small) => (
-    <a key={n.key} ref={i === 0 ? first : undefined} href={`#/${n.key}`} onClick={onClose} tabIndex={open ? 0 : -1}
-      className={`menu-item ${small ? 'small' : ''} ${page === n.key ? 'active' : ''}`} style={{ '--i': i, '--r': `${n.r}deg` }}>
-      <span className="tip">{n.label}<small>{n.key === 'review' && review ? `${review} waiting` : n.note}</small></span>
-      <Sticker name={n.key} />
-    </a>
-  )
-  return (
-    <div id="app-menu" className={`menu ${open ? 'open' : ''}`} aria-hidden={!open}>
-      <nav className="menu-main" aria-label="Menu">{main.map((n, i) => item(n, i))}</nav>
-      <div className="menu-sub">
-        <div className="menu-sub-label">( or the rest of it )</div>
-        <div className="menu-sub-row">
-          {sub.map((n, i) => item(n, i + 4, true))}
-          <button type="button" className="menu-item small" style={{ '--i': 7, '--r': '5deg' }} tabIndex={open ? 0 : -1}
-            onClick={() => { onEngine(); onClose() }}>
-            <span className="tip">{status?.running ? 'Stop engine' : 'Start engine'}<small>{status?.running ? 'running' : 'stopped'}</small></span>
-            <Sticker name="power" />
-          </button>
-        </div>
-      </div>
-      <div className="menu-foot">
-        <b>CLIPPED</b>
-        <div className="menu-foot-links">
-          <a href="#/guides" onClick={onClose}>Guides</a><i>·</i>
-          <a href="https://github.com/ritviksajeev/clipped" target="_blank" rel="noreferrer">GitHub</a><i>·</i>
-          <a href="https://evzero.org" target="_blank" rel="noreferrer">evzero.org</a>
-        </div>
-        <span className="menu-keys"><kbd>Ctrl</kbd> + <kbd>1</kbd>–<kbd>7</kbd> jump anywhere · <kbd>Esc</kbd> close</span>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------- status bar
-
-function StatusBar({ status }) {
-  const now = useNow()
-  const peak = useRef({})
-  const state = engineState(status)
-  const nu = status?.next_upload
-  const left = nu ? Math.max(0, (new Date(nu.at).getTime() - now) / 1000) : null
-  if (nu && left != null) peak.current[nu.item_id] = Math.max(peak.current[nu.item_id] || 0, left, 1)
-  const progress = nu ? 1 - left / (peak.current[nu.item_id] || 1) : 0
-  const q = status?.quota || {}
-  const quotaPct = Math.min(100, ((q.used || 0) / (q.limit || 1)) * 100)
-  const activity = Object.values(status?.activity || {}).find((a) => a && a !== 'idle')
-  const C = 2 * Math.PI * 6
-  return (
-    <footer className="statusbar">
-      <span className={`sb-state ${status?.running ? (state === 'paused' ? 'paused' : 'on') : ''}`}>
-        <span className="led" />{STATE_LABEL[state] || state}
-      </span>
-      <span className="sb-activity">{status?.offline ? "Can't reach the engine" : activity || (status?.running ? 'Watching for clips' : 'Press start to go')}</span>
-      <span className="sb-sep" />
-      <span className="sb-next" title={nu ? `${fmtTime(nu.at)} · ${nu.reason}` : ''}>
-        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" className="track" /><circle cx="8" cy="8" r="6" className="fill"
-          strokeDasharray={C} strokeDashoffset={C * (1 - progress)} /></svg>
-        {nu ? (left > 0 ? <>Next upload <b>{fmtDuration(left)}</b></> : <>Upload <b>{status?.running ? 'now' : 'ready'}</b></>) : 'No upload queued'}
-      </span>
-      <span className="sb-quota" title={`YouTube API quota · resets ${fmtTime(q.resets_at)}`}>
-        Quota <span className="sb-meter"><span style={{ width: `${Math.max(quotaPct, 2)}%` }} /></span>
-        {(q.used || 0).toLocaleString()}/{(q.limit || 0).toLocaleString()}
-      </span>
-      <span className="sb-today">{status?.uploads_today ?? 0}/{status?.max_uploads_per_day ?? 0} today</span>
-      <span className="sb-ver">v{status?.version || '-'}</span>
-    </footer>
-  )
-}
-
 // ---------------------------------------------------------------- app
 
 export default function App() {
+  const [phase, setPhase] = useState('splash') // splash → gate (no licence) → app
+  const [license, setLicense] = useState(null)
   const [route, setRoute] = useState(parseHash())
   const [status, setStatus] = useState(null)
   const [toasts, setToasts] = useState([])
-  const [menuOpen, setMenuOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [native, setNative] = useState(hasNativeWindow())
   const [maxed, setMaxed] = useState(false)
@@ -276,6 +178,20 @@ export default function App() {
   }, [])
   useEffect(() => { document.documentElement.classList.toggle('native', native) }, [native])
 
+  // The licence decides where the splash leads. Asked once at launch, and again
+  // whenever the engine answers 402 (a monthly key ran out while the app was open).
+  const checkLicense = useCallback(async () => {
+    try { setLicense(await api.get('/api/license')) } catch { setLicense({ licensed: false, problem: "Can't reach the clipped engine.", offline: true }) }
+  }, [])
+  useEffect(() => { checkLicense() }, [checkLicense])
+  useEffect(() => {
+    const locked = () => { checkLicense(); setPhase((p) => (p === 'app' ? 'gate' : p)) }
+    window.addEventListener('clipped:license', locked)
+    return () => window.removeEventListener('clipped:license', locked)
+  }, [checkLicense])
+  const afterSplash = useCallback(() => setPhase((p) => (p === 'splash' ? (license?.licensed ? 'app' : 'gate') : p)), [license])
+  const unlocked = useCallback((r) => { setLicense(r); setPhase('app'); window.location.hash = '#/' }, [])
+
   useEffect(() => {
     const onHash = () => {
       const next = parseHash()
@@ -283,7 +199,6 @@ export default function App() {
         if (prev.page !== next.page || prev.sub !== next.sub) contentRef.current?.scrollTo({ top: 0 })
         return next
       })
-      setMenuOpen(false)
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -291,7 +206,9 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') setMenuOpen(false)
+      if (phase !== 'app') return
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
+      if (e.key === 'Escape' && !typing && !document.querySelector('.modal-backdrop')) window.location.hash = '#/'
       if ((e.ctrlKey || e.metaKey) && /^[1-7]$/.test(e.key)) {
         e.preventDefault()
         window.location.hash = `#/${NAV[Number(e.key) - 1].key}`
@@ -299,21 +216,22 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
-  useEffect(() => { document.documentElement.classList.toggle('menu-open', menuOpen) }, [menuOpen])
+  }, [phase])
 
   const refreshStatus = useCallback(async () => {
     try {
       setStatus(await api.get('/api/status'))
-    } catch {
+    } catch (e) {
+      if (e.status === 402) return // the licence handler takes it from here
       setStatus((s) => (s ? { ...s, offline: true } : { offline: true }))
     }
   }, [])
   useEffect(() => {
+    if (phase !== 'app') return
     refreshStatus()
     const t = setInterval(refreshStatus, 3000)
     return () => clearInterval(t)
-  }, [refreshStatus])
+  }, [phase, refreshStatus])
   useEffect(() => { document.documentElement.classList.toggle('engine-on', !!status?.running) }, [status?.running])
 
   const notify = useCallback((message, kind = 'info') => {
@@ -336,21 +254,21 @@ export default function App() {
   const Page = PAGES[route.page]
 
   return (
-    <AppContext.Provider value={{ status, refreshStatus, notify, route, toggleEngine, engineBusy: busy }}>
-      <div className="app">
-        <TitleBar status={status} page={route.page} menuOpen={menuOpen} onMenu={() => setMenuOpen((o) => !o)} native={native}
-          maxed={maxed} setMaxed={setMaxed} />
-        <div className="body">
-          <Rail page={route.page} status={status} onEngine={toggleEngine} busy={busy} />
-          <main className="content" ref={contentRef}>
-            {status?.offline && <div className="banner error" style={{ marginBottom: 16 }}>Can't reach the clipped engine. Is the app still running?</div>}
-            <div key={`${route.page}/${route.sub}`} className="page-enter">
-              <Page />
+    <AppContext.Provider value={{ status, refreshStatus, notify, route, toggleEngine, engineBusy: busy, license, checkLicense }}>
+      <div className={`app phase-${phase} ${route.page === 'home' ? 'is-home' : 'is-page'}`}>
+        <TopBar page={route.page} status={status} phase={phase} onEngine={toggleEngine} engineBusy={busy}
+          native={native} maxed={maxed} setMaxed={setMaxed} />
+        <main className="content" ref={contentRef}>
+          {phase === 'gate' && <Gate license={license} onUnlocked={unlocked} />}
+          {phase === 'app' && (
+            <div key={`${route.page}/${route.sub}`} className={route.page === 'home' ? 'home-enter' : 'page-enter'}>
+              {route.page === 'home'
+                ? <Home nav={NAV} status={status} onEngine={toggleEngine} engineBusy={busy} />
+                : <div className="page-wrap"><Page /></div>}
             </div>
-          </main>
-          <Menu open={menuOpen} page={route.page} status={status} onClose={() => setMenuOpen(false)} onEngine={toggleEngine} />
-        </div>
-        <StatusBar status={status} />
+          )}
+        </main>
+        {phase === 'splash' && <Splash ready={!!license} onDone={afterSplash} />}
         <div className="toasts" aria-live="polite">
           {toasts.map((t) => (
             <div key={t.id} className={`toast ${t.kind}`} role="status" onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}>

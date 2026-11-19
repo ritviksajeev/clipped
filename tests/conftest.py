@@ -23,6 +23,19 @@ def isolated_home(tmp_path, monkeypatch):
     yield home
 
 
+@pytest.fixture(autouse=True)
+def licensed(request, monkeypatch):
+    """Tests run as a licensed install unless marked ``unlicensed`` (licence tests use real keys)."""
+    if request.node.get_closest_marker("unlicensed"):
+        yield None
+        return
+    from clipped import licensing
+
+    lic = licensing.License(plan="lifetime", issued=0, expires=0, id="00" * 10)
+    monkeypatch.setattr(licensing.LicenseState, "current", lambda self: (lic, ""))
+    yield lic
+
+
 @pytest.fixture(scope="session")
 def media_dir(tmp_path_factory) -> Path:
     return tmp_path_factory.mktemp("media")

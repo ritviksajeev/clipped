@@ -7,7 +7,7 @@ import { Sticker } from '../stickers.jsx'
 const SECTIONS = [
   ['connections', 'Connections', 'key'], ['mode', 'Mode & schedule', 'dashboard'], ['safety', 'Safety', 'power'],
   ['captions', 'Captions', 'review'], ['layout', 'Layout & hooks', 'clipped'], ['titles', 'Titles & AI', 'sparkle'],
-  ['youtube', 'YouTube uploads', 'history'], ['advanced', 'Advanced', 'settings'], ['about', 'About', 'guides'],
+  ['youtube', 'YouTube uploads', 'history'], ['advanced', 'Advanced', 'settings'], ['licence', 'Licence', 'done'], ['about', 'About', 'guides'],
 ]
 const INTERVALS = [[30, '30 minutes'], [120, '2 hours'], [360, '6 hours'], [1440, '24 hours']]
 
@@ -187,6 +187,66 @@ function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
   )
 }
 
+function InstagramCard() {
+  const { notify, refreshStatus } = useApp()
+  const [st, setSt] = useState(null)
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = () => api.get('/api/instagram/status').then(setSt).catch(() => {})
+  useEffect(() => { load() }, [])
+  const connect = async () => {
+    setBusy(true)
+    try {
+      const r = await api.post('/api/instagram/connect', { value: token })
+      setSt(r); setToken(''); refreshStatus(); notify(`Instagram connected as @${r.username}`, 'ok')
+    } catch (e) { notify(e.message, 'error') } finally { setBusy(false) }
+  }
+  return (
+    <section className="card glow">
+      <div className="card-head"><h2>Instagram Reels</h2><a className="ulink" href="#/guides/instagram">How to get a token</a></div>
+      {st?.connected ? (
+        <div className="yt-connect">
+          <span className="chip live">Connected · @{st.username}</span>
+          <button className="btn small ghost danger" onClick={async () => { setSt(await api.post('/api/instagram/disconnect')); refreshStatus() }}>Disconnect</button>
+          {st.token_expires_at && <span className="faint small">token renews itself · good until {new Date(st.token_expires_at).toLocaleDateString()}</span>}
+        </div>
+      ) : (
+        <div className="key-entry">
+          <input type="password" autoComplete="off" spellCheck={false} placeholder="Paste your Instagram access token (IGAA…)" value={token}
+            onChange={(e) => setToken(e.target.value)} />
+          <div className="row"><button className="btn small primary" disabled={busy || token.trim().length < 20} onClick={connect}>{busy ? 'Checking…' : 'Connect'}</button></div>
+        </div>
+      )}
+      {st?.problem && <div className="banner error small">{st.problem}</div>}
+      <p className="field-hint">Needs an Instagram Business or Creator account. Every approved Short is posted as a Reel, with the same title,
+        streamer credit and links, alongside YouTube if that's connected too.</p>
+    </section>
+  )
+}
+
+function LicenceCard() {
+  const { license, checkLicense, notify } = useApp()
+  const lic = license?.license
+  if (!lic) return <Loading />
+  return (
+    <>
+      <dl className="about">
+        <dt>Plan</dt><dd>{lic.plan === 'lifetime' ? 'Lifetime' : 'Monthly'}</dd>
+        <dt>Valid</dt><dd>{lic.expires ? `until ${new Date(lic.expires * 1000).toLocaleDateString()} · ${lic.days_left} days left` : 'forever'}</dd>
+        <dt>Key id</dt><dd><code>{lic.id}</code></dd>
+      </dl>
+      <div className="row" style={{ marginTop: 14 }}>
+        <a className="btn small" href={license.buy_url} target="_blank" rel="noreferrer"
+          onClick={(e) => { e.preventDefault(); openExternal(license.buy_url) }}>{lic.plan === 'lifetime' ? 'evzero.org' : 'Renew or go lifetime'} <span className="arrow">↗</span></a>
+        <button className="btn small ghost danger" onClick={async () => {
+          if (!window.confirm('Remove the licence from this computer? You can paste it again any time.')) return
+          await api.del('/api/license'); notify('Licence removed'); checkLicense(); window.dispatchEvent(new Event('clipped:license'))
+        }}>Remove from this computer</button>
+      </div>
+    </>
+  )
+}
+
 function Connections({ onProvider }) {
   const { notify, route, refreshStatus } = useApp()
   const [secrets, setSecrets] = useState(null)
@@ -259,6 +319,14 @@ function Connections({ onProvider }) {
         {yt?.auth_problem && <div className="banner error small">{yt.auth_problem}</div>}
         <p className="field-hint">Google will warn that the app is unverified. It's your own app: choose <em>Advanced → Go to clipped</em>.
           Uploads may be locked to private until your project passes YouTube's free API audit (<a className="link" href="#/guides/youtube">details</a>).</p>
+      </section>
+
+      <InstagramCard />
+
+      <section className="card glow">
+        <div className="card-head"><h2>No setup? Download instead</h2></div>
+        <p className="muted small">Without YouTube or Instagram connected, clipped still finds and renders Shorts. In Review,
+          use <b>Download</b> and <b>Copy caption</b>, post them wherever you like, then mark them <b>Posted</b>.</p>
       </section>
 
       <AIConnect secrets={s} storage={storage} reloadSecrets={load} onProvider={onProvider} />
@@ -571,18 +639,19 @@ export default function Settings() {
             </Section>
           </>}
 
+          {section === 'licence' && <Section title="Licence"><LicenceCard /></Section>}
           {section === 'about' && <Section title="About">
             {about ? <dl className="about">
               <dt>Version</dt><dd>{about.version}</dd>
               <dt>Data folder</dt><dd><code>{about.data_dir}</code></dd>
               <dt>ffmpeg</dt><dd>{about.ffmpeg || 'not found'} {about.libass ? <span className="chip live">libass</span> : <span className="chip bad">libass missing</span>}</dd>
               <dt>Secrets</dt><dd>{about.secret_storage}</dd>
-              <dt>Network</dt><dd>Bound to this computer only. There are no clipped servers; nothing is sent anywhere except Twitch, Google and the AI provider you pick.</dd>
+              <dt>Network</dt><dd>Bound to this computer only. There are no clipped servers; nothing is sent anywhere except Twitch, Google, Instagram and the AI provider you pick.</dd>
             </dl> : <Loading />}
           </Section>}
         </div>
       </div>
-      {dirty && section !== 'connections' && section !== 'about' && (
+      {dirty && !['connections', 'about', 'licence'].includes(section) && (
         <div className="savebar">
           <span>Unsaved changes</span>
           <button className="btn small ghost" onClick={() => setData(saved)}>Discard</button>

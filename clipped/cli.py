@@ -48,6 +48,15 @@ def cmd_process(args: argparse.Namespace) -> int:
     from .pipeline import download, runner
     from .pipeline.transcribe import StaticTranscriber, Transcript, WhisperTranscriber
 
+    from . import licensing
+    from .db import Database
+
+    lic, problem = licensing.LicenseState(KeyStore(), Database(config.db_path())).current()
+    if lic is None:
+        print(f"clipped needs a licence: {problem or 'open the app and enter your key.'} "
+              f"Get one at {licensing.BUY_URL}", file=sys.stderr)
+        return 3
+
     settings = load_global_settings()
     source = args.source
     clip_id = download.clip_id_from_url(source) if download.is_url(source) else Path(source).stem

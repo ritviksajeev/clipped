@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, fmtTime } from '../api.js'
+import { api, fmtNum, fmtTime } from '../api.js'
 import { engineState, useApp } from '../App.jsx'
-import { Count, Kicker, Loading, PageHead } from '../components/ui.jsx'
+import { ActivityChart, Ring, Spark } from '../components/charts.jsx'
+import { Count, Loading } from '../components/ui.jsx'
 import { useNow } from '../fx.js'
 import { Sticker } from '../stickers.jsx'
 import { BoxArt } from './Categories.jsx'
@@ -9,59 +10,44 @@ import { BoxArt } from './Categories.jsx'
 // The engine state, written like a burned-in caption: the word that matters
 // pops in the highlight colour, the way clipped captions a Short.
 const CAPTION = {
-  stopped: ['Engine', 'stopped'],
-  idle: ['Engine', 'running'],
-  working: ['Making', 'shorts'],
+  stopped: ['Engine', 'off'],
+  idle: ['Watching', 'for clips'],
+  working: ['Making', 'Shorts'],
   paused: ['Uploads', 'paused'],
   offline: ['Engine', 'offline'],
 }
 
 function Clock({ seconds }) {
   if (seconds == null) return null
-  if (seconds <= 0) return <span className="clock">due <span className="u">now</span></span>
+  if (seconds <= 0) return <span className="clock">now</span>
   const s = Math.round(seconds)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
   const pad = (n) => String(n).padStart(2, '0')
-  return (
-    <span className="clock">
-      {h > 0 && <>{h}<span className="u">h</span></>}{pad(m)}<span className="u">m</span>{pad(sec)}<span className="u">s</span>
-    </span>
-  )
+  return <span className="clock">{h > 0 && <>{h}<span className="u">h</span></>}{pad(m)}<span className="u">m</span>{pad(s % 60)}<span className="u">s</span></span>
 }
 
-function Checklist({ status, cats }) {
+function Setup({ status, cats }) {
   const steps = [
-    ['Twitch keys saved', status.twitch_configured, '#/settings/connections'],
-    ['YouTube connected', status.youtube_connected, '#/settings/connections'],
-    ['At least one category', (cats?.length ?? 1) > 0, '#/categories'],
-    ['ffmpeg available', status.ffmpeg, '#/guides/ffmpeg'],
+    ['Twitch keys', status.twitch_configured, '#/settings/connections'],
+    ['A game to watch', (cats?.length ?? 1) > 0, '#/categories'],
+    ['YouTube or Instagram (or just download)', status.youtube_connected || status.instagram_connected || status.download_only, '#/settings/connections'],
   ]
   if (steps.every(([, ok]) => ok)) return null
-  const done = steps.filter(([, ok]) => ok).length
   return (
-    <section className="card glow setup">
-      <div className="card-head">
-        <h2>Finish setup</h2>
-        <span className="chip accent">{done} / {steps.length} done</span>
-      </div>
-      <ol className="checklist">
-        {steps.map(([label, ok, href], i) => (
-          <li key={label} className={ok ? 'done' : ''}>
-            <span className="tick">{ok ? '✓' : String(i + 1).padStart(2, '0')}</span>
-            {ok ? label : <a className="link" href={href}>{label}</a>}
-          </li>
-        ))}
-      </ol>
-      <p className="field-hint">New here? Start with the <a className="link" href="#/guides/quick-start">quick start guide</a>.</p>
+    <section className="setup-strip">
+      <span className="label">Finish setup</span>
+      {steps.map(([label, ok, href]) => (
+        <a key={label} href={href} className={`setup-step ${ok ? 'done' : ''}`}><span className="tick">{ok ? '✓' : '•'}</span>{label}</a>
+      ))}
+      <a className="ulink" href="#/guides/quick-start">Quick start</a>
     </section>
   )
 }
 
 function Logs() {
   const [lines, setLines] = useState([])
-  const [follow, setFollow] = useState(true)
+  const [open, setOpen] = useState(false)
   const box = useRef(null)
   useEffect(() => {
     let es, poll, last = 0
@@ -70,7 +56,7 @@ function Logs() {
       last = entries[entries.length - 1].seq
       setLines((prev) => {
         const seen = new Set(prev.map((l) => l.seq))
-        return [...prev, ...entries.filter((e) => !seen.has(e.seq))].slice(-500)
+        return [...prev, ...entries.filter((e) => !seen.has(e.seq))].slice(-400)
       })
     }
     try {
@@ -78,30 +64,24 @@ function Logs() {
       es.onmessage = (ev) => push([JSON.parse(ev.data)])
       es.onerror = () => {
         es.close()
-        poll = setInterval(async () => {
-          try { push(await api.get(`/api/logs?after=${last}`)) } catch { /* offline */ }
-        }, 3000)
+        poll = setInterval(async () => { try { push(await api.get(`/api/logs?after=${last}`)) } catch { /* offline */ } }, 3000)
       }
     } catch { /* no EventSource */ }
     return () => { es && es.close(); poll && clearInterval(poll) }
   }, [])
-  useEffect(() => {
-    if (follow && box.current) box.current.scrollTop = box.current.scrollHeight
-  }, [lines, follow])
+  useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight }, [lines, open])
+  const shown = open ? lines : lines.slice(-4)
   return (
-    <section className="card glow log-card">
+    <section className={`card log-card ${open ? 'open' : ''}`}>
       <div className="card-head">
-        <h2>Live log</h2>
-        <label className="check small"><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> <span className="label">follow</span></label>
+        <h2>Activity</h2>
+        <button className="linklike label" onClick={() => setOpen((o) => !o)}>{open ? 'Less' : 'Full log'}</button>
       </div>
-      <div className="logs" ref={box} onScroll={(e) => {
-        const el = e.currentTarget
-        setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 30)
-      }}>
-        {lines.length === 0 && <div className="faint">Nothing yet. Press start.</div>}
-        {lines.map((l) => (
+      <div className="logs" ref={box}>
+        {lines.length === 0 && <div className="faint small">Nothing yet. Start the engine.</div>}
+        {shown.map((l) => (
           <div key={l.seq} className={`log ${l.level.toLowerCase()}`}>
-            <span className="log-time">{new Date(l.ts * 1000).toLocaleTimeString([], { hour12: false })}</span>
+            <span className="log-time">{new Date(l.ts * 1000).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}</span>
             <span className="log-msg">{l.message}</span>
           </div>
         ))}
@@ -113,10 +93,17 @@ function Logs() {
 export default function Dashboard() {
   const { status, refreshStatus, notify, toggleEngine, engineBusy } = useApp()
   const [cats, setCats] = useState(null)
+  const [act, setAct] = useState(null)
   const [pressed, setPressed] = useState(0)
   const now = useNow()
 
   useEffect(() => { api.get('/api/categories').then(setCats).catch(() => setCats([])) }, [])
+  useEffect(() => {
+    const load = () => api.get('/api/activity?days=14').then(setAct).catch(() => {})
+    load()
+    const t = setInterval(load, 60000)
+    return () => clearInterval(t)
+  }, [])
 
   if (!status || (status.offline && !status.state)) return <Loading label="Connecting to the engine" />
   const running = status.running
@@ -132,122 +119,69 @@ export default function Dashboard() {
   const q = status.quota || {}
   const nu = status.next_upload
   const left = nu ? Math.max(0, (new Date(nu.at).getTime() - now) / 1000) : null
-  const activity = Object.entries(status.activity || {}).filter(([, a]) => a !== 'idle')
-  const quotaPct = Math.min(100, ((q.used || 0) / (q.limit || 1)) * 100)
+  const job = Object.values(status.activity || {}).find((a) => a && a !== 'idle')
   const enabled = (cats || []).filter((c) => c.enabled)
+  const series = (k) => act?.days?.map((d) => d[k]) || []
 
   return (
-    <div className="page">
-      <PageHead idx={1} crumb="dashboard" title="Clip" accent="control."
-        lead={<>Mode: <b>{status.mode === 'auto' ? 'Auto' : 'Manual approval'}</b>. {status.mode === 'auto'
-          ? 'clipped picks, renders and uploads on its own schedule.'
-          : 'Nothing goes up until you approve it.'} <a className="link" href="#/settings/mode">Change</a></>} />
+    <div className="page dash">
+      {status.auth_problem && <div className="banner error">{status.auth_problem} <a href="#/settings/connections">Reconnect</a></div>}
+      {status.quota_paused_until && <div className="banner warn">YouTube's upload quota is used up for today. Uploads resume at {fmtTime(status.quota_paused_until)}.</div>}
+      <Setup status={status} cats={cats} />
 
-      {status.auth_problem && <div className="banner error">{status.auth_problem} <a href="#/settings/connections">Reconnect YouTube</a></div>}
-      {status.quota_paused_until && <div className="banner warn">YouTube API quota is used up for today. Uploads resume at {fmtTime(status.quota_paused_until)}.</div>}
-      {!status.secret_storage_is_os && <div className="banner warn small">No OS keychain found, so your keys are stored in a file only your user account can read. <a href="#/guides/troubleshooting">Details</a></div>}
-
-      <Checklist status={status} cats={cats} />
-
-      <section className={`card glow engine-card ${running ? 'on' : ''} ${state === 'paused' ? 'paused' : ''}`}>
-        <div className="engine-bg" aria-hidden="true"><i /><i /></div>
+      <section className={`dash-hero ${running ? 'on' : ''} ${state === 'paused' ? 'paused' : ''}`}>
         <button className="engine-btn" key={pressed} onClick={() => { setPressed((p) => p + 1); toggleEngine() }} disabled={engineBusy}
           aria-pressed={running} aria-label={running ? 'Stop the engine' : 'Start the engine'}>
           <span className="engine-orbit" aria-hidden="true" />
           <Sticker name="power" />
-          <span className="engine-hint">{engineBusy ? 'one sec…' : running ? 'press to stop' : 'press to start'}</span>
         </button>
-        <div className="engine-info">
-          <div className="caption-state" key={state}>
-            <span>{word}</span> <span className="hl">{hl}</span>
-          </div>
-          <div className="activity">
-            {activity.map(([k, a]) => (
-              <div key={k + a}><span className="chip accent">{k === 'net' ? 'network' : 'render'}</span> <span>{a}</span></div>
-            ))}
-            {running && !activity.length && <div className="faint">Waiting for the next job…</div>}
-            {!running && <div className="faint">Press the switch and clipped starts finding clips in your categories.</div>}
-          </div>
-          <div className="next">
-            <span className="label">Next upload</span>
-            {nu ? (
-              <>
-                <Clock seconds={left} />
-                <span className="next-meta">{fmtTime(nu.at)} · {nu.reason} · “{nu.title?.slice(0, 70)}”</span>
-              </>
-            ) : (
-              <span className="next-meta">{status.auth_problem ? 'On hold until YouTube is reconnected'
-                : status.youtube_connected ? 'Nothing approved or ready yet' : 'Connect YouTube to upload'}</span>
-            )}
-          </div>
-          <div className="row">
-            {status.paused_until
-              ? <button className="btn small" onClick={() => pause(0)}>Resume uploads · paused until {fmtTime(status.paused_until)}</button>
-              : <>
-                <button className="btn small ghost" onClick={() => pause(1)}>Pause 1h</button>
-                <button className="btn small ghost" onClick={() => pause(24)}>Pause 24h</button>
-              </>}
-          </div>
+        <div className="dash-hero-text">
+          <div className="caption-state" key={state}><span>{word}</span> <span className="hl">{hl}</span></div>
+          <p className="dash-now">{job || (running ? 'Waiting for the next job' : 'Press the switch to start finding clips')}</p>
+        </div>
+        <div className="dash-next">
+          <span className="label">Next upload</span>
+          {nu ? <><Clock seconds={left} /><span className="faint small ellipsis" title={nu.title}>{nu.title}</span></>
+            : <span className="muted small">{status.youtube_connected || status.instagram_connected ? 'Nothing approved yet' : 'Not connected · download from Review'}</span>}
+          {status.paused_until
+            ? <button className="linklike small" onClick={() => pause(0)}>Resume (paused until {fmtTime(status.paused_until)})</button>
+            : <span className="dash-pause"><button className="linklike small" onClick={() => pause(1)}>Pause 1h</button> · <button className="linklike small" onClick={() => pause(24)}>24h</button></span>}
         </div>
       </section>
 
-      <Kicker idx={1} name="Numbers" meta={`${status.uploads_today}/${status.max_uploads_per_day} uploaded today`} />
-      <section className="stat-grid">
-        <a className="stat glow" href="#/review">
-          <span className="stat-top">Waiting for review <span className="arrow">↗</span></span>
-          <span className="stat-num"><Count value={items.review || 0} /></span>
-        </a>
-        <a className="stat glow" href="#/review?tab=scheduled">
-          <span className="stat-top">Approved · ready <span className="arrow">↗</span></span>
-          <span className="stat-num"><Count value={(items.approved || 0) + (items.ready || 0)} /></span>
-        </a>
-        <div className="stat glow">
-          <span className="stat-top">Rendering</span>
-          <span className="stat-num"><Count value={items.processing || 0} /></span>
-        </div>
-        <a className="stat glow" href="#/history">
-          <span className="stat-top">Uploaded total <span className="arrow">↗</span></span>
-          <span className="stat-num"><Count value={items.uploaded || 0} /></span>
-        </a>
-        {items.failed > 0 && (
-          <a className="stat glow" href="#/review?tab=failed">
-            <span className="stat-top">Failed <span className="arrow">↗</span></span>
-            <span className="stat-num warn-text"><Count value={items.failed} /></span>
-          </a>
-        )}
+      <section className="tiles">
+        <a className="tile" href="#/review"><span className="label">To review</span><b><Count value={items.review || 0} /></b><Spark values={series('made')} /></a>
+        <a className="tile" href="#/review?tab=scheduled"><span className="label">Scheduled</span><b><Count value={(items.approved || 0) + (items.ready || 0)} /></b></a>
+        <a className="tile" href="#/history"><span className="label">Uploaded today</span><b><Count value={status.uploads_today || 0} /><small>/{status.max_uploads_per_day}</small></b><Spark values={series('uploaded')} /></a>
+        <a className="tile" href="#/insights"><span className="label">Views · 14 days</span><b><Count value={act?.totals?.views || 0} format={(v) => fmtNum(Math.round(v))} /></b><Spark values={series('views')} /></a>
       </section>
-
-      {status.last_error && <div className="banner warn small">Last error: {status.last_error}</div>}
 
       <div className="dash-grid">
-        <div className="stack">
-          <section className="card glow">
-            <div className="card-head"><h2>YouTube quota</h2><span className="label">resets {fmtTime(q.resets_at)}</span></div>
-            <div className="quota-num"><Count value={q.used || 0} /><small> / {(q.limit || 0).toLocaleString()} units</small></div>
-            <div className="meter"><span style={{ width: `${Math.max(quotaPct, 1.5)}%` }} /></div>
-            <p className="field-hint">Room for about {q.uploads_left ?? 0} more upload(s) in YouTube's quota today.
-              {' '}Your own cap: {status.uploads_today ?? 0}/{status.max_uploads_per_day} today.</p>
-            {(status.uploads_today ?? 0) >= status.max_uploads_per_day && (q.uploads_left ?? 0) > 0 &&
-              <p className="field-hint warn-text">Scheduled uploads have hit your daily cap. Upload now still works, or raise <a className="link" href="#/settings/mode">Max uploads per day</a>.</p>}
+        <section className="card chart-card">
+          <div className="card-head"><h2>Last 14 days</h2><span className="label">{act ? `${act.totals.made} made · ${act.totals.uploaded} uploaded` : ''}</span></div>
+          {act ? <ActivityChart days={act.days} /> : <Loading />}
+        </section>
+        <div className="dash-side">
+          <section className="card ring-card">
+            <Ring value={q.used || 0} max={q.limit || 1} label={`${q.uploads_left ?? 0}`} sub="uploads left" />
+            <div>
+              <h2>YouTube quota</h2>
+              <p className="faint small">{(q.used || 0).toLocaleString()} of {(q.limit || 0).toLocaleString()} units · resets {fmtTime(q.resets_at)}</p>
+            </div>
           </section>
-          <section className="card glow">
+          <section className="card watching">
             <div className="card-head"><h2>Watching</h2><a className="ulink" href="#/categories">Edit</a></div>
-            {cats === null ? <Loading /> : enabled.length === 0 ? (
-              <p className="muted small">No categories yet. <a className="link" href="#/categories">Pick your games</a>.</p>
-            ) : (
-              <div className="mini-cats">
-                {enabled.slice(0, 8).map((c, i) => (
-                  <a key={c.id} href="#/categories" className="mini-cat" title={c.name}>
-                    <BoxArt src={c.box_art_url} i={i} size="md" />
-                    <span className="tip">{c.name}<small>{c.uploads} up</small></span>
-                  </a>
-                ))}
-              </div>
-            )}
+            {cats === null ? <Loading /> : enabled.length === 0
+              ? <p className="muted small">No games yet. <a className="link" href="#/categories">Pick some</a>.</p>
+              : <div className="mini-cats">{enabled.slice(0, 6).map((c, i) => (
+                <a key={c.id} href="#/categories" className="mini-cat" title={c.name}><BoxArt src={c.box_art_url} i={i} size="md" /></a>
+              ))}</div>}
           </section>
         </div>
-        <Logs />
       </div>
+
+      {items.failed > 0 && <a className="banner warn small" href="#/review?tab=failed">{items.failed} Short{items.failed === 1 ? '' : 's'} failed. Open Review to retry.</a>}
+      <Logs />
     </div>
   )
 }
