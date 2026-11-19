@@ -12,6 +12,7 @@ import collections
 import logging
 import logging.handlers
 import re
+import sys
 import threading
 import time
 from typing import Any
@@ -134,7 +135,12 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
 
     handlers: list[logging.Handler] = [live_buffer]
     if console:
-        handlers.append(logging.StreamHandler())
+        stream = sys.stderr
+        try:  # never crash on characters a legacy Windows console can't encode
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
+        handlers.append(logging.StreamHandler(stream))
     if log_dir is not None:
         handlers.append(
             logging.handlers.RotatingFileHandler(
