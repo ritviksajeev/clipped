@@ -37,6 +37,7 @@ from .logs import get_logger
 log = get_logger("desktop")
 
 WINDOW_SIZE = (1380, 900)
+MIN_SIZE = (980, 640)
 IDLE_TIMEOUT = 150.0  # seconds without a heartbeat before we assume the window is gone
 AWAY_TIMEOUT = 15 * 60.0  # the window said it is busy elsewhere (e.g. a sign-in popup)
 BYE_GRACE = 8.0  # a reload also says goodbye; wait for the page to come back
@@ -213,7 +214,7 @@ def load_window_state() -> dict:
     try:
         data = json.loads(window_state_path().read_text("utf-8"))
         w, h = int(data["width"]), int(data["height"])
-        state = {"width": max(980, min(w, 4000)), "height": max(640, min(h, 3000))}
+        state = {"width": max(MIN_SIZE[0], min(w, 4000)), "height": max(MIN_SIZE[1], min(h, 3000))}
         if isinstance(data.get("x"), int) and isinstance(data.get("y"), int) and data["x"] > -200 and data["y"] > -50:
             state.update(x=data["x"], y=data["y"])
         return state
@@ -246,6 +247,22 @@ class _Bridge:
             webbrowser.open(url)
             return True
         return False
+
+    def window_state(self) -> dict:
+        return {"maximized": self._maximized}
+
+    def resize_window(self, width, height) -> bool:
+        """Resize from the page's edge handles (logical pixels, like CSS px)."""
+        win = self._window
+        if win is None or self._maximized:
+            return False
+        try:
+            w = max(MIN_SIZE[0], min(int(width), 8000))
+            h = max(MIN_SIZE[1], min(int(height), 6000))
+        except (TypeError, ValueError):
+            return False
+        win.resize(w, h)
+        return True
 
     def window_control(self, action: str) -> bool:
         win = self._window
@@ -315,8 +332,12 @@ class Tray:
                 pass
 
 
-def run_native(url: str, session: "AppSession | None" = None, keep_running=lambda: False) -> None:
-    """Frameless native window. Blocks until clipped quits."""
+def run_native(url: str, session: "AppSession | None" = None, keep_running=lambda: False, on_ready=None) -> None:
+    """Frameless native window. Blocks until clipped quits.
+
+    `on_ready(window, bridge, tray)` is called from a background thread once the
+    window exists (used by the Windows smoke test in CI).
+    """
     import webview
 
     webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True  # title-bar buttons click instead of dragging
@@ -362,7 +383,7 @@ def run_native(url: str, session: "AppSession | None" = None, keep_running=lambd
     bridge = _Bridge(on_close=request_close)
     geometry = load_window_state()
     win = webview.create_window(
-        "clipped", url, min_size=(980, 640), frameless=True, easy_drag=False, background_color="#09090b",
+        "clipped", url, min_size=MIN_SIZE, frameless=True, easy_drag=False, background_color="#09090b",
         js_api=bridge, **geometry,
     )
     bridge._window = win
@@ -370,6 +391,8 @@ def run_native(url: str, session: "AppSession | None" = None, keep_running=lambd
     win.events.closing += on_closing
     if session is not None:
         session.on_show = show
+    if on_ready is not None:
+        threading.Thread(target=on_ready, args=(win, bridge, tray), daemon=True).start()
     try:
         webview.start()  # blocks until the window is destroyed
     finally:

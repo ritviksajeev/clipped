@@ -129,3 +129,7 @@ export const hasNativeWindow = () => Boolean(window.pywebview?.api?.window_contr
 export function windowControl(action) {
   try { return window.pywebview?.api?.window_control?.(action) } catch { return null }
 }
+
+export function nativeApi() {
+  return window.pywebview?.api || null
+}

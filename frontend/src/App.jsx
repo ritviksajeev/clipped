@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { api, fmtDuration, fmtTime, hasNativeWindow, windowControl } from './api.js'
+import { api, fmtDuration, fmtTime, hasNativeWindow, nativeApi, windowControl } from './api.js'
 import { useNow } from './fx.js'
 import { Sticker } from './stickers.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -45,14 +45,17 @@ function Icon({ d, size = 10 }) {
   return <svg width={size} height={size} viewBox="0 0 10 10" fill="none" aria-hidden="true">{d}</svg>
 }
 
-function TitleBar({ status, page, menuOpen, onMenu, native }) {
+function TitleBar({ status, page, menuOpen, onMenu, native, maxed, setMaxed }) {
   const state = engineState(status)
-  const [maxed, setMaxed] = useState(false)
   const nav = NAV.find((n) => n.key === page)
-  const drag = 'pywebview-drag-region'
+  // pywebview drags the window from elements with this class. A maximised
+  // window is not dragged: double-click (or the button) restores it first.
+  const drag = native && !maxed ? 'pywebview-drag-region' : ''
   return (
     <header className={`titlebar ${drag}`} onDoubleClick={(e) => {
-      if (native && e.target.classList.contains(drag)) { windowControl('toggle_maximize'); setMaxed((m) => !m) }
+      if (native && (e.target === e.currentTarget || e.target.classList.contains('tb-space') || e.target.classList.contains('brand-word') || e.target.classList.contains('tb-crumb'))) {
+        windowControl('toggle_maximize'); setMaxed((m) => !m)
+      }
     }}>
       <a href="#/dashboard" className="brand" aria-label="clipped dashboard">
         <span className="brand-stk"><Sticker name="clipped" /></span>
@@ -84,6 +87,56 @@ function TitleBar({ status, page, menuOpen, onMenu, native }) {
         </div>
       )}
     </header>
+  )
+}
+
+// ---------------------------------------------------------------- edge resizing (native window)
+
+// A frameless window has no OS border to grab, so the right edge, bottom edge
+// and corner resize it through the native bridge.
+function ResizeHandles() {
+  const start = (edge) => (e) => {
+    const api = nativeApi()
+    if (!api?.resize_window || e.button !== 0) return
+    e.preventDefault()
+    const el = e.currentTarget
+    el.setPointerCapture(e.pointerId)
+    const from = { x: e.screenX, y: e.screenY, w: window.innerWidth, h: window.innerHeight }
+    let want = null
+    let busy = false
+    let frame = 0
+    const send = async () => {
+      frame = 0
+      if (busy || !want) return
+      const next = want
+      want = null
+      busy = true
+      try { await api.resize_window(next.w, next.h) } finally { busy = false; if (want) frame = requestAnimationFrame(send) }
+    }
+    const move = (ev) => {
+      want = {
+        w: edge === 'bottom' ? from.w : Math.round(from.w + ev.screenX - from.x),
+        h: edge === 'right' ? from.h : Math.round(from.h + ev.screenY - from.y),
+      }
+      if (!frame) frame = requestAnimationFrame(send)
+    }
+    const up = () => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      document.documentElement.classList.remove('resizing')
+    }
+    document.documentElement.classList.add('resizing')
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  return (
+    <>
+      <div className="rz rz-right" onPointerDown={start('right')} aria-hidden="true" />
+      <div className="rz rz-bottom" onPointerDown={start('bottom')} aria-hidden="true" />
+      <div className="rz rz-corner" onPointerDown={start('corner')} aria-hidden="true" />
+    </>
   )
 }
 
@@ -209,10 +262,15 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [native, setNative] = useState(hasNativeWindow())
+  const [maxed, setMaxed] = useState(false)
   const contentRef = useRef(null)
 
   useEffect(() => {
-    const ready = () => setNative(hasNativeWindow())
+    const ready = async () => {
+      setNative(hasNativeWindow())
+      try { const st = await nativeApi()?.window_state?.(); if (st) setMaxed(!!st.maximized) } catch { /* older bridge */ }
+    }
+    if (hasNativeWindow()) ready()
     window.addEventListener('pywebviewready', ready)
     return () => window.removeEventListener('pywebviewready', ready)
   }, [])
@@ -280,7 +338,8 @@ export default function App() {
   return (
     <AppContext.Provider value={{ status, refreshStatus, notify, route, toggleEngine, engineBusy: busy }}>
       <div className="app">
-        <TitleBar status={status} page={route.page} menuOpen={menuOpen} onMenu={() => setMenuOpen((o) => !o)} native={native} />
+        <TitleBar status={status} page={route.page} menuOpen={menuOpen} onMenu={() => setMenuOpen((o) => !o)} native={native}
+          maxed={maxed} setMaxed={setMaxed} />
         <div className="body">
           <Rail page={route.page} status={status} onEngine={toggleEngine} busy={busy} />
           <main className="content" ref={contentRef}>
@@ -299,6 +358,7 @@ export default function App() {
             </div>
           ))}
         </div>
+        {native && !maxed && <ResizeHandles />}
       </div>
     </AppContext.Provider>
   )

@@ -268,3 +268,18 @@ def test_native_window_is_preferred_on_windows(monkeypatch):
     assert desktop.choose_window() == "native"
     monkeypatch.setattr(desktop, "native_available", lambda: False)
     assert desktop.choose_window() == "app"  # e.g. pywebview failed to install: Edge app window
+
+
+def test_edge_resize_is_clamped_and_off_when_maximised():
+    bridge = desktop._Bridge(on_close=lambda: None)
+    assert bridge.resize_window(1200, 800) is False  # no window yet
+    win = FakeWin()
+    sizes = []
+    win.resize = lambda w, h: sizes.append((w, h))
+    bridge._window = win
+    assert bridge.resize_window(1200.6, 800) and sizes[-1] == (1200, 800)
+    assert bridge.resize_window(10, 10) and sizes[-1] == desktop.MIN_SIZE
+    assert bridge.resize_window("wide", 3) is False
+    bridge.window_control("toggle_maximize")
+    assert bridge.window_state() == {"maximized": True}
+    assert bridge.resize_window(1300, 900) is False and len(sizes) == 2
