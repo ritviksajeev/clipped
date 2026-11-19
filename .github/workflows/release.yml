@@ -1,10 +1,17 @@
 name: release
 
-# Push a tag like v0.1.0 to build the desktop apps and publish a GitHub Release.
+# Push a tag like v0.1.0 to build the desktop apps and publish a GitHub Release,
+# or run it by hand: with a tag name it publishes that release (GitHub creates the
+# tag on the commit that was built and tested); without one it only builds and tests.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Publish a release with this tag, e.g. v0.1.0 (leave empty to only build and test)"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -62,9 +69,11 @@ jobs:
       - name: Installer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.1.0" }
+          $version = if ($env:RELEASE_TAG -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "0.1.0" }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\clipped.iss
           if (-not (Test-Path dist\clipped-windows-x64-setup.exe)) { throw "installer was not built" }
       - name: Installer installs and uninstalls (Windows)
@@ -104,9 +113,14 @@ jobs:
   publish:
     needs: build
     # Publish whatever built (the Windows installer must not wait on a flaky macOS runner).
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')) }}
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
+      - name: Check the tag name
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "Tag must look like v0.1.0, got: $RELEASE_TAG"; exit 1; }
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -115,3 +129,5 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
