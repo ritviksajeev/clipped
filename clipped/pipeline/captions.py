@@ -95,6 +95,8 @@ def build_ass(
     height: int = 1920,
     hook: Overlay | None = None,
     commentary: Overlay | None = None,
+    watermark: str = "",
+    duration: float = 0.0,
 ) -> str:
     primary = hex_to_ass(style.primary_color)
     outline = hex_to_ass(style.outline_color)
@@ -118,6 +120,7 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{style.font_size},{primary},{primary},{outline},{shadow},-1,0,0,0,100,100,1,0,1,{style.outline:g},{style.shadow:g},5,{style.margin_left},{style.margin_right},0,1
 Style: Hook,{font},{int(style.font_size * 0.95)},&H00000000,&H00000000,{hook_box},{shadow},-1,0,0,0,100,100,1,0,3,18,0,8,{style.margin_left},{style.margin_right},{style.margin_top},1
+Style: Watermark,{font},40,&H50FFFFFF,&H50FFFFFF,&H70000000,&H00000000,-1,0,0,0,100,100,1,0,1,2,0,1,{style.margin_left},{style.margin_right},{style.margin_bottom + 40},1
 Style: Commentary,{font},{int(style.font_size * 0.6)},&H00FFFFFF,&H00FFFFFF,{banner_box},{shadow},-1,0,0,0,100,100,0,0,3,14,0,8,{style.margin_left},{style.margin_right},{style.margin_top + 170},1
 
 [Events]
@@ -168,4 +171,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"Dialogue: 2,{ass_time(commentary.start)},{ass_time(commentary.end)},Commentary,,0,0,0,,"
             f"{{\\fad(200,200)}}{text}"
         )
+    if watermark and duration > 0:
+        # Free plan: a quiet mark bottom-left, above the Shorts title and clear of the buttons.
+        events.append(f"Dialogue: 4,{ass_time(0)},{ass_time(duration)},Watermark,,0,0,0,,{clean_text(watermark)}")
     return header + "\n".join(events) + "\n"

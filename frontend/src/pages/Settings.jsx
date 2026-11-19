@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { api, isDesktop, openExternal } from '../api.js'
+import { api, isDesktop, openExternal, openPage } from '../api.js'
 import { useApp } from '../App.jsx'
 import { AutoWarning, Field, Loading, NumberInput, PageHead, Select, TagInput, Toggle } from '../components/ui.jsx'
 import { Sticker } from '../stickers.jsx'
@@ -228,21 +228,25 @@ function LicenceCard() {
   const { license, checkLicense, notify } = useApp()
   const lic = license?.license
   if (!lic) return <Loading />
+  const free = license.tier === 'free'
   return (
     <>
       <dl className="about">
-        <dt>Plan</dt><dd>{lic.plan === 'lifetime' ? 'Lifetime' : 'Monthly'}</dd>
-        <dt>Valid</dt><dd>{lic.expires ? `until ${new Date(lic.expires * 1000).toLocaleDateString()} · ${lic.days_left} days left` : 'forever'}</dd>
+        <dt>Plan</dt><dd>{free ? 'Free day' : lic.plan === 'pro' ? 'Pro · $2.99 a month' : lic.plan === 'lifetime' ? 'Lifetime' : 'Monthly'}</dd>
+        <dt>Valid</dt><dd>{lic.expires ? `until ${new Date(lic.expires * 1000).toLocaleString()}${free ? ` · ${lic.hours_left}h left` : ` · ${lic.days_left} days left`}` : lic.plan === 'pro' ? 'while your subscription runs · checked daily' : 'forever'}</dd>
+        {free && <><dt>Watermark</dt><dd>On new Shorts · {license.removals_left} free removal{license.removals_left === 1 ? '' : 's'} left today</dd></>}
+        <dt>This computer</dt><dd><code>{license.device}</code></dd>
         <dt>Key id</dt><dd><code>{lic.id}</code></dd>
       </dl>
       <div className="row" style={{ marginTop: 14 }}>
-        <a className="btn small" href={license.buy_url} target="_blank" rel="noreferrer"
-          onClick={(e) => { e.preventDefault(); openExternal(license.buy_url) }}>{lic.plan === 'lifetime' ? 'evzero.org' : 'Renew or go lifetime'} <span className="arrow">↗</span></a>
+        {lic.plan !== 'lifetime' && <a className="btn small primary" href={license.buy_url} target="_blank" rel="noreferrer"
+          onClick={(e) => { e.preventDefault(); openPage(license.buy_url) }}>{free ? 'Go Pro · $2.99/mo' : 'Manage subscription'} <span className="arrow">↗</span></a>}
         <button className="btn small ghost danger" onClick={async () => {
-          if (!window.confirm('Remove the licence from this computer? You can paste it again any time.')) return
-          await api.del('/api/license'); notify('Licence removed'); checkLicense(); window.dispatchEvent(new Event('clipped:license'))
-        }}>Remove from this computer</button>
+          if (!window.confirm(lic.plan === 'pro' ? 'Sign out of this computer? That frees your Pro key for another computer.' : 'Remove the licence from this computer?')) return
+          await api.del('/api/license'); notify('Signed out of this computer'); checkLicense(); window.dispatchEvent(new Event('clipped:license'))
+        }}>{lic.plan === 'pro' ? 'Sign out of this computer' : 'Remove from this computer'}</button>
       </div>
+      {lic.plan === 'pro' && <p className="field-hint" style={{ marginTop: 10 }}>Pro runs on one computer at a time. To move it, sign out here, or choose "Move Pro to this computer" on the new one (3 moves a month).</p>}
     </>
   )
 }

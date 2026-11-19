@@ -2,10 +2,11 @@
 // which the backend requires (blocks cross-site requests from other tabs).
 
 export class ApiError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, code = '') {
     super(typeof detail === 'string' ? detail : JSON.stringify(detail))
     this.status = status
     this.detail = detail
+    this.code = code // e.g. 'device_limit' when a Pro key is active on another computer
   }
 }
 
@@ -32,7 +33,7 @@ async function request(method, path, body, isForm = false) {
     if (res.status === 402 && data && data.license_required) window.dispatchEvent(new Event('clipped:license'))
     let detail = data && data.detail !== undefined ? data.detail : data
     if (Array.isArray(detail)) detail = detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ')
-    throw new ApiError(res.status, detail || res.statusText)
+    throw new ApiError(res.status, detail || res.statusText, (data && data.code) || '')
   }
   return data
 }
@@ -123,6 +124,19 @@ export async function openExternal(url) {
   }
   window.location.href = url
   return Boolean(APP_TOKEN)
+}
+
+// evzero.org pages (free day, Pro, watermark removal): the app keeps running and
+// waits, so these always open beside it, never in place of it.
+export async function openPage(url) {
+  if (window.pywebview?.api?.open_url) {
+    await window.pywebview.api.open_url(url)
+    return true
+  }
+  // ('noopener' would make window.open report null even when the tab opened)
+  const w = window.open(url, '_blank')
+  if (w) { try { w.opener = null } catch { /* cross-origin already */ } }
+  return Boolean(w)
 }
 
 // The native window (pywebview, frameless): clipped draws its own title bar,

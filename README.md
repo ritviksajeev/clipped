@@ -2,9 +2,9 @@
 
 **Local-first Twitch clips → captioned YouTube Shorts and Instagram Reels.** clipped finds popular clips in the Twitch categories you choose, turns them into vertical videos with word-by-word burned-in captions, and posts them to YouTube and Instagram, either after you approve each one or fully automatically on a schedule. No accounts connected? Download each Short and post it yourself.
 
-clipped needs a licence key: **$2.99 a month or $32 for life** at <https://evzero.org/clipped/buy/>. Keys are Ed25519-signed and checked offline (see *Licence keys* below).
+Two ways in, both at <https://evzero.org/clipped/buy/>: a **free day** (watch a few short ads on evzero.org, use clipped for 24 hours, Shorts carry a small watermark) or **Pro at $2.99 a month** (or ₹249 in India): no watermark, no ads. See *Plans and keys* below.
 
-It runs on **your computer** with **your own API keys**. There is no clipped server and no account. Nothing about you, your keys or your videos is sent anywhere except to Twitch, Google and (optionally) the AI provider you pick.
+It runs on **your computer** with **your own API keys**. There is no clipped account. Your keys, your videos and your channels never leave your computer except to go to Twitch, Google, Instagram and (optionally) the AI provider you pick; the only thing sent to evzero.org is your licence key and an anonymous id for this computer.
 
 ![clipped review queue](website/assets/review.jpg)
 
@@ -165,7 +165,8 @@ Learning starts after 6 uploads (titles) and 12 uploads (timing) have been live 
 * Everything runs locally. The SQLite database, rendered videos and logs live in your user data folder (shown in **Settings → About**), or in `CLIPPED_HOME` if set.
 * Keys are stored in the OS keychain. If none is available (headless Linux, Docker), they go in an owner-only file and the dashboard says so. Keys are never logged; known secrets and token-shaped strings are redacted from every log line.
 * The local API is write-only for secrets (it returns only "set" plus the last 4 characters), binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding), and requires a custom header on every state-changing request (CSRF).
-* Network destinations: `api.twitch.tv`, `id.twitch.tv`, Twitch clip CDNs (via yt-dlp), `oauth2.googleapis.com`, `www.googleapis.com`, `youtubeanalytics.googleapis.com`, `huggingface.co` (one-time whisper model download), and `api.anthropic.com` / `api.openai.com` only if you enable AI titles.
+* Licence checks go to `evzero.org/api/clipped`: the key, a one-way hash of the operating system's machine id (16 hex characters, see `clipped/device.py`) and, while a free day is being unlocked, a random one-time code. Nothing else.
+* Network destinations: `evzero.org` (licence), `api.twitch.tv`, `id.twitch.tv`, Twitch clip CDNs (via yt-dlp), `oauth2.googleapis.com`, `www.googleapis.com`, `youtubeanalytics.googleapis.com`, `huggingface.co` (one-time whisper model download), and `api.anthropic.com` / `api.openai.com` only if you enable AI titles.
 
 ## Responsibility
 
@@ -206,12 +207,17 @@ python scripts/build_website.py          # regenerate website/guides/*.html from
 
 **Website:** plain HTML/CSS/JS in `website/`. The `pages` workflow publishes it to GitHub Pages. For Netlify, `netlify.toml` already points at `website/`.
 
-## Licence keys
+## Plans and keys
 
-The app opens on a welcome screen that asks for a key. A key is a 20-byte record (plan, issue date, expiry, a random id) plus an Ed25519 signature, written as `CLIP-XXXXX-…` in Crockford base32 (about 160 characters). The app embeds only the public key (`clipped/licensing.py`), so nothing in the app or this repository can make a key. The local API refuses to work without a valid key (HTTP 402), and so does `clipped process`.
+The app opens on a welcome screen with two choices, plus "I have a key".
 
-* Issue keys with `scripts/license_admin.py issue --key <private key file> --plan lifetime|monthly`. The private key lives only with evzero; it is never committed (`*.pem` is ignored).
-* Monthly keys expire after 31 days (plus 3 days' grace) and are re-issued on each payment.
+* **Free day.** clipped opens `evzero.org/clipped/free` in your browser; after a few short ads the page hands the app a **day key** and the app unlocks by itself (or paste the key shown on the page). A day key lasts 24 hours, works only on the computer that asked for it, and can't be reused: when it runs out you get a new one the same way. One live free day per computer. Shorts rendered on a free day carry a small `clipped · evzero.org` watermark; twice per free day you can remove it from a Short by watching another few ads (**Review → Remove it**).
+* **Pro, $2.99 a month** (₹249 in India; cards from anywhere, UPI in India), paid through Razorpay on `evzero.org/clipped/buy`. The key appears right after paying, and **Find my key** on the same page shows it again from the subscription id and email. A Pro key works on **one computer at a time**: using it on another computer asks to move it there, which signs the first one out (3 moves a month, self-service). The app re-checks the subscription with evzero.org about once a day and keeps working offline for up to a week. Cancel any time; Pro lasts to the end of the paid month. Pro uploads re-render free-day Shorts without the watermark.
+
+**How keys work.** A key is a small signed record (plan, issue date, expiry, a random id, and for day keys the computer it belongs to) plus an Ed25519 signature, written as `CLIP-XXXXX-…` in Crockford base32. The app embeds only the public key (`clipped/licensing.py`), so nothing in the app or this repository can make a key. evzero.org signs day keys, Pro certificates (which say "this Pro key is good on this computer until …") and watermark removals with the same private key, so a fake server can't unlock anything. The local API refuses to work without a valid key (HTTP 402), and so does `clipped process`.
+
+* The licence server is a set of Vercel functions in the website repo (`ritviksajeev/ev`, `api/clipped/`), with Upstash Redis for state and Razorpay Subscriptions for payments.
+* `scripts/license_admin.py issue --key <private key file> --plan lifetime|monthly` makes **gift keys** for testers and friends. They're checked offline and aren't locked to a computer, so give them out sparingly. The private key lives only with evzero; it is never committed (`*.pem` is ignored).
 * `scripts/license_admin.py show <key>` decodes and verifies a key.
 
 ## Licence

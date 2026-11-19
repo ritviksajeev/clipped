@@ -73,6 +73,7 @@ class Engine:
         self._youtube_factory = youtube_factory or (lambda: YouTubeClient.from_keystore(self.store, quota=self.quota))
         self._instagram_factory = instagram_factory or (lambda: InstagramClient(self.store.get("instagram_access_token")))
         self.instagram_problem = ""
+        self.tier_of: Callable[[], str] = lambda: "pro"  # set by the app from the licence: "free" adds the watermark
         self._transcriber_factory = transcriber_factory or self._default_transcriber
         self._transcriber: tuple[tuple, Transcriber] | None = None
         self.running = False
@@ -391,8 +392,8 @@ class Engine:
         to_instagram = self.instagram_ready(gs) and not item["instagram_id"]
         if not to_youtube and not to_instagram:
             raise EngineError("Connect YouTube or Instagram first, or download the Short from Review and post it yourself.")
-        if item["needs_rerender"]:
-            self.rerender_item(item_id)
+        if item["needs_rerender"] or ((item.get("analysis") or {}).get("watermarked") and self.tier_of() != "free"):
+            self.rerender_item(item_id)  # also drops a free-plan watermark once you're on Pro
             item = self.db.get_item(item_id)
         if to_youtube and not self.quota.can_spend("videos.insert"):
             self.db.set_value("quota_paused_until", iso(self.quota.reset_at()))
@@ -663,6 +664,7 @@ class Engine:
             intro=Path(intro) if intro and Path(intro).exists() else None,
             outro=Path(outro) if outro and Path(outro).exists() else None,
             api_keys=ai.credentials(self.store),
+            watermark=self.tier_of() == "free",
             # read again just before titles are written, so a key saved mid-render counts
             title_settings=lambda: (self.settings().metadata, ai.credentials(self.store)),
         )
@@ -726,6 +728,7 @@ class Engine:
         summary["text"] = result.analysis.transcript.text[:1500]
         summary["plan"] = result.output.plan.to_dict()
         summary["notes"] = result.output.plan.notes + ([note] if note else [])
+        summary["watermarked"] = opts.watermark
         score = ranking.final_score(row["score"], result.analysis.hype)
         status = "ready" if mode == "auto" else "review"
         updated = self.db.update_item(
@@ -814,6 +817,7 @@ class Engine:
         if facecam:
             opts.reframe = opts.reframe.model_copy(update={"mode": "split", "facecam": facecam})
         opts.subtitles = item.get("analysis", {}).get("subtitles") is not False  # switched off in review
+        opts.watermark = opts.watermark and item.get("analysis", {}).get("watermark") is not False  # removed after ads
         if item.get("analysis", {}).get("reframe_override"):
             from .models import ReframeSettings
 
@@ -824,8 +828,11 @@ class Engine:
         out = runner.render_outputs(analysis, workdir, opts, item["hook_text"], item["thumbnail_text"] or item["hook_text"]
                                     or item["title"], item["commentary"])
         log.info("Re-rendered “%s”", item["title"][:60])
+        analysis_now = dict(item.get("analysis") or {})
+        analysis_now["watermarked"] = opts.watermark
         return self.db.update_item(item_id, video_path=str(out.video), thumbnail_path=str(out.thumbnail),
-                                   duration=out.duration, needs_rerender=False, workdir=str(workdir))
+                                   duration=out.duration, needs_rerender=False, workdir=str(workdir),
+                                   analysis=analysis_now)
 
     def reject_item(self, item_id: int) -> dict:
         item = self.db.get_item(item_id)

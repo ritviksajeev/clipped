@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, fmtDuration, fmtNum, fmtTime, nativeApi } from '../api.js'
+import { api, fmtDuration, fmtNum, fmtTime, nativeApi, openPage } from '../api.js'
 import { useApp } from '../App.jsx'
 import { Empty, Field, Loading, PageHead, Select, Tabs, Toggle } from '../components/ui.jsx'
 
@@ -17,8 +17,9 @@ function hashtagsFrom(description) {
 }
 
 function Editor({ item, onChanged, onRemoved }) {
-  const { notify, refreshStatus, status } = useApp()
+  const { notify, refreshStatus, status, license, checkLicense } = useApp()
   const downloadOnly = !!status?.download_only
+  const [wmWait, setWmWait] = useState(null)
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState('')
   const [frameKey, setFrameKey] = useState(0)
@@ -34,6 +35,24 @@ function Editor({ item, onChanged, onRemoved }) {
     })
   }, [item.id, item.updated_at])
 
+  const afterRemoval = useRef(null) // set below: refresh the preview once the clean render lands
+  useEffect(() => {
+    if (!wmWait) return
+    const started = Date.now()
+    const t = setInterval(async () => {
+      try {
+        const r = await api.get(`/api/items/${item.id}/unwatermark/${wmWait}`)
+        if (r.done) {
+          clearInterval(t); setWmWait(null)
+          notify(`Watermark removed (${r.n} of 2 today). Re-rendering…`, 'ok')
+          checkLicense()
+          afterRemoval.current?.()
+        }
+      } catch (e) { clearInterval(t); setWmWait(null); notify(e.message, 'error') }
+      if (Date.now() - started > 15 * 60 * 1000) { clearInterval(t); setWmWait(null) }
+    }, 2500)
+    return () => clearInterval(t)
+  }, [wmWait])
   if (!form) return null
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const dirty = ['title', 'description', 'hook_text', 'thumbnail_text', 'commentary'].some((k) => (form[k] ?? '') !== (item[k] ?? ''))
@@ -117,6 +136,14 @@ function Editor({ item, onChanged, onRemoved }) {
     onRemoved(item.id)
     refreshStatus()
   })
+  // Free plan: two Shorts a day can lose the watermark, each after a few more ads on evzero.org.
+  const watermarked = !!item.analysis?.watermarked && item.analysis?.watermark !== false
+  const removeWatermark = () => run('wm', async () => {
+    const r = await api.post(`/api/items/${item.id}/unwatermark/start`)
+    setWmWait(r.nonce)
+    openPage(r.url)
+  })
+  afterRemoval.current = waitForRender
   const subtitlesOn = item.analysis?.subtitles !== false
   const setSubtitles = (on) => run('subtitles', async () => {
     if (dirty) await save()
@@ -190,6 +217,17 @@ function Editor({ item, onChanged, onRemoved }) {
         <Field label="Commentary · on screen + description" hint="Your own take makes the Short more than a repost.">
           <input value={form.commentary} onChange={set('commentary')} disabled={!editable} maxLength={200} placeholder="e.g. watch his crosshair before the swing" />
         </Field>
+        {watermarked && editable && license?.tier === 'free' && (
+          <div className="wm-row">
+            {wmWait ? <span>Watch the ads in your browser; the watermark comes off by itself.</span>
+              : license.removals_left > 0
+                ? <><span>This Short has the free-plan watermark.</span>
+                  <button className="btn small" disabled={!!busy} onClick={removeWatermark}>Remove it · {license.removals_left} left today</button></>
+                : <span>Both free removals used today. <a className="link" href={license.buy_url} onClick={(e) => { e.preventDefault(); openPage(license.buy_url) }}>Pro</a> has no watermark at all.</span>}
+          </div>
+        )}
+        {item.analysis?.watermarked && license?.tier === 'pro' && editable &&
+          <p className="faint small">Made on the free plan: it's re-rendered without the watermark before it uploads (or press Re-render).</p>}
         <Toggle label="Subtitles" checked={subtitlesOn} disabled={!editable || !!busy || rendering}
           hint={subtitlesOn ? 'Word-by-word captions are burned into the video.' : 'No captions. The hook and your commentary still show.'}
           onChange={setSubtitles} />

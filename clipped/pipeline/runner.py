@@ -24,6 +24,7 @@ from . import audio, captions, download, ffmpeg, hooks, metadata, render, thumbn
 from .transcribe import Transcriber, Transcript
 
 log = get_logger("pipeline")
+WATERMARK_TEXT = "clipped · evzero.org"
 
 
 class SkipClip(Exception):
@@ -47,6 +48,7 @@ class ProcessOptions:
     outro: Path | None = None
     api_keys: dict = field(default_factory=dict)
     subtitles: bool = True  # burn the word-by-word captions in (hook and commentary always show)
+    watermark: bool = False  # free plan: a small "clipped · evzero.org" mark on the video
     # Returns (metadata settings, keys) as they are now; titles are written late in a long job.
     title_settings: Callable[[], tuple[MetadataSettings, dict]] | None = None
     stage: Callable[[str], None] | None = None  # told "Downloading", "Transcribing", "Rendering"...
@@ -187,7 +189,8 @@ def render_outputs(analysis: Analysis, workdir: Path, opts: ProcessOptions, hook
         start = opts.hook.hook_seconds if hook_overlay else 0.0
         commentary_overlay = captions.Overlay(commentary, start, plan.duration)
     # Captions are laid out in a fixed 1080x1920 design space; libass scales to the output size.
-    ass_text = captions.build_ass(words, opts.captions, hook=hook_overlay, commentary=commentary_overlay)
+    ass_text = captions.build_ass(words, opts.captions, hook=hook_overlay, commentary=commentary_overlay,
+                                  watermark=WATERMARK_TEXT if opts.watermark else "", duration=plan.duration)
     ass_path = workdir / "captions.ass"
     ass_path.write_text(ass_text, "utf-8")
 

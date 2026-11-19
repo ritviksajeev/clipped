@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { api, hasNativeWindow, nativeApi, windowControl } from './api.js'
+import { api, hasNativeWindow, nativeApi, openPage, windowControl } from './api.js'
 import { Sticker } from './stickers.jsx'
 import Splash from './shell/Splash.jsx'
 import Gate from './shell/Gate.jsx'
@@ -50,7 +50,7 @@ function Icon({ d, size = 10 }) {
 
 // One slim bar, part of the window rather than a header on top of it. At home it is
 // just the mark and the window buttons; on a page it adds where you are and a way back.
-function TopBar({ page, status, phase, onEngine, engineBusy, native, maxed, setMaxed }) {
+function TopBar({ page, status, phase, onEngine, engineBusy, native, maxed, setMaxed, license }) {
   const state = engineState(status)
   const nav = NAV.find((n) => n.key === page)
   const atHome = phase !== 'app' || page === 'home'
@@ -74,6 +74,12 @@ function TopBar({ page, status, phase, onEngine, engineBusy, native, maxed, setM
         </span>
       )}
       <span className={`tb-space ${drag}`} />
+      {phase === 'app' && license?.tier === 'free' && (
+        <a className="plan-chip" href={license.buy_url} title="Free day · Shorts carry a watermark. Pro removes it."
+          onClick={(e) => { e.preventDefault(); openPage(license.buy_url) }}>
+          Free · {license.license?.hours_left ?? 0}h left
+        </a>
+      )}
       {phase === 'app' && status && !status.offline && (
         <button type="button" className={`state-pill ${status.running ? (state === 'paused' ? 'paused' : 'on') : 'off'}`}
           onClick={onEngine} disabled={engineBusy} title={status.running ? 'Stop the engine' : 'Start the engine'}>
@@ -185,6 +191,11 @@ export default function App() {
   }, [])
   useEffect(() => { checkLicense() }, [checkLicense])
   useEffect(() => {
+    if (phase !== 'app') return
+    const t = setInterval(checkLicense, 5 * 60 * 1000) // hours left on a free day, Pro re-checks
+    return () => clearInterval(t)
+  }, [phase, checkLicense])
+  useEffect(() => {
     const locked = () => { checkLicense(); setPhase((p) => (p === 'app' ? 'gate' : p)) }
     window.addEventListener('clipped:license', locked)
     return () => window.removeEventListener('clipped:license', locked)
@@ -256,7 +267,7 @@ export default function App() {
   return (
     <AppContext.Provider value={{ status, refreshStatus, notify, route, toggleEngine, engineBusy: busy, license, checkLicense }}>
       <div className={`app phase-${phase} ${route.page === 'home' ? 'is-home' : 'is-page'}`}>
-        <TopBar page={route.page} status={status} phase={phase} onEngine={toggleEngine} engineBusy={busy}
+        <TopBar page={route.page} status={status} phase={phase} onEngine={toggleEngine} engineBusy={busy} license={license}
           native={native} maxed={maxed} setMaxed={setMaxed} />
         <main className="content" ref={contentRef}>
           {phase === 'gate' && <Gate license={license} onUnlocked={unlocked} />}

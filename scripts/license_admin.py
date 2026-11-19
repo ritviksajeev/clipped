@@ -1,10 +1,18 @@
-"""Issue clipped licence keys. For evzero only: needs the private signing key.
+"""Issue clipped gift keys. For evzero only: needs the private signing key.
+
+Customers never get keys from here: Pro keys come from Razorpay checkout on
+evzero.org/clipped/buy and free day keys from evzero.org/clipped/free (both in
+the ev repo, api/clipped/). This script is for gifts, testers and your own copy.
 
     python scripts/license_admin.py init  --out C:\\safe\\place\\clipped-signing-key.pem
     python scripts/license_admin.py issue --key C:\\safe\\place\\clipped-signing-key.pem --plan lifetime
     python scripts/license_admin.py issue --key ... --plan monthly            # 31 days
     python scripts/license_admin.py issue --key ... --plan monthly --days 62
     python scripts/license_admin.py show CLIP-XXXXX-...                        # decode and verify a key
+
+Gift keys are checked offline and aren't locked to a computer, so anyone you
+give one to could pass it on: keep them for people you trust, and prefer a
+--plan monthly key with --days for testers, since it runs out by itself.
 
 ``init`` makes a new key pair and prints the public half, which goes in
 clipped/licensing.py (PUBLIC_KEY_HEX). Doing that invalidates every key issued
@@ -76,7 +84,8 @@ def main() -> None:
     p.set_defaults(fn=cmd_init)
     p = sub.add_parser("issue", help="issue keys")
     p.add_argument("--key", required=True, help="private key file from init")
-    p.add_argument("--plan", choices=sorted(licensing.PLANS.values()), required=True)
+    p.add_argument("--plan", choices=["lifetime", "monthly"], required=True,
+                   help="gift keys only: Pro and free day keys come from evzero.org")
     p.add_argument("--days", type=int, help="validity in days (monthly default 31; lifetime never expires)")
     p.add_argument("--count", type=int, default=1)
     p.set_defaults(fn=cmd_issue)

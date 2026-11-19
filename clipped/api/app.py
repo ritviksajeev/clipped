@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import io
 import re
+import secrets
 import json
 import os
 import shutil
@@ -38,6 +39,7 @@ from ..models import CategorySettings, ClipInfo, GlobalSettings, ReframeSettings
 from ..optimizer import insights
 from ..pipeline import metadata
 from ..services import ai
+from ..services import license_server
 from ..services.instagram import InstagramClient, InstagramError
 from ..services.twitch import TwitchClient, TwitchError
 from ..services.youtube import AuthError, OAuthFlow, YouTubeClient, YouTubeError
@@ -85,6 +87,7 @@ class ItemPatch(BaseModel):
 
 class LicenseBody(BaseModel):
     key: str = Field(..., max_length=400)
+    force: bool = False  # Pro: move the key to this computer
 
 
 class ApproveBody(BaseModel):
@@ -177,15 +180,28 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     openrouter_flow = ai.OpenRouterConnect()
     license_state = licensing.LicenseState(store, db)
     app_state_license = license_state  # exposed below for tests and the desktop shell
+    engine.tier_of = license_state.tier  # free plan: watermark on new Shorts
+
+    async def license_checks() -> None:
+        """Re-check a Pro subscription about once a day (renewals, cancellations, moves)."""
+        while True:
+            try:
+                await asyncio.to_thread(license_state.refresh)
+            except Exception as exc:  # never let a network hiccup end the loop
+                log.debug("licence refresh: %s", exc)
+            await asyncio.sleep(1800)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         reset = db.reset_stuck_items()
         if reset:
             log.info("Recovered %d item(s) interrupted by the last shutdown", reset)
+        checker = asyncio.create_task(license_checks()) if autostart else None
         if autostart and db.get_value("engine_running", False) and license_state.current()[0]:
             await engine.start()
         yield
+        if checker:
+            checker.cancel()
         if engine.running:
             await engine.stop()
         engine.shutdown()
@@ -337,30 +353,69 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         return {"auto_warning_acknowledged": True}
 
     # ------------------------------------------------------------------ licence
+    pending_unlocks: dict[str, dict] = {}  # nonce -> what the free page is unlocking (day key / watermark)
+
+    def license_view(problem_override: str | None = None) -> dict:
+        lic, problem = license_state.current()
+        now = license_state.now()
+        return {"licensed": lic is not None, "license": lic.to_dict(now) if lic else None,
+                "tier": lic.tier if lic else "none", "removals_left": license_state.removals_left(),
+                "problem": problem if problem_override is None else problem_override,
+                "buy_url": license_server.buy_url(), "device": license_state.device}
+
+    def license_error(exc: licensing.LicenseError) -> JSONResponse:
+        status = 409 if exc.code in ("device_limit", "too_many_moves") else 400
+        return JSONResponse({"detail": str(exc), "code": exc.code}, status_code=status)
+
     @app.get("/api/license")
     def license_status():
-        lic, problem = license_state.current()
-        return {"licensed": lic is not None, "license": lic.to_dict(license_state.now()) if lic else None,
-                "problem": problem, "buy_url": licensing.BUY_URL}
+        return license_view()
 
     @app.post("/api/license")
     def license_activate(body: LicenseBody):
         try:
-            lic = license_state.activate(body.key)
+            lic = license_state.activate(body.key, force=body.force)
         except licensing.LicenseError as exc:
-            raise HTTPException(400, str(exc)) from None
+            return license_error(exc)
         log.info("Licence activated (%s)", lic.plan)
-        return {"licensed": True, "license": lic.to_dict(license_state.now()), "problem": "",
-                "buy_url": licensing.BUY_URL}
+        return license_view("")
 
     @app.delete("/api/license")
     async def license_remove():
         if engine.running:
             await engine.stop()
-        license_state.deactivate()
+        await asyncio.to_thread(license_state.deactivate)
         log.info("Licence removed from this computer")
-        return {"licensed": False, "license": None, "problem": "", "buy_url": licensing.BUY_URL}
+        return license_view("")
 
+    @app.post("/api/license/free")
+    def license_free_start():
+        """A free day: open evzero.org/clipped/free in the browser; the app collects the key itself."""
+        nonce = secrets.token_hex(16)
+        pending_unlocks[nonce] = {"kind": "day", "at": time.time()}
+        return {"nonce": nonce, "url": license_server.free_url(license_state.device, nonce)}
+
+    @app.get("/api/license/free/{nonce}")
+    def license_free_poll(nonce: str):
+        if nonce not in pending_unlocks:
+            raise HTTPException(404, "Start again from the welcome screen")
+        try:
+            got = license_server.pickup(nonce)
+        except license_server.LicenseServerError:
+            return {"pending": True}
+        if not got:
+            return {"pending": True}
+        pending_unlocks.pop(nonce, None)
+        if got.get("kind") != "day":
+            raise HTTPException(400, "That wasn't a free day key")
+        try:
+            license_state.activate(got["value"])
+        except licensing.LicenseError as exc:
+            return license_error(exc)
+        log.info("Free day started")
+        return {"done": True, **license_view("")}
+
+    # ------------------------------------------------------------------ secrets
     # ------------------------------------------------------------------ secrets
     @app.get("/api/secrets")
     def secrets_status():
@@ -836,6 +891,54 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         if config.data_dir().resolve() not in path.parents and not os.environ.get("CLIPPED_ALLOW_ANY_MEDIA"):
             raise HTTPException(403, "Outside data directory")
         return FileResponse(path, media_type="video/mp4", filename=download_name(item["title"]))
+
+    def _apply_removal(item_id: int, token: str) -> dict:
+        item = db.get_item(item_id)
+        if not item:
+            raise HTTPException(404, "Item not found")
+        try:
+            n = license_state.redeem_removal(token)
+        except licensing.LicenseError as exc:
+            raise HTTPException(400, str(exc)) from None
+        analysis = dict(item["analysis"])
+        analysis["watermark"] = False
+        db.update_item(item_id, analysis=analysis, needs_rerender=True)
+        engine.queue_rerender(item_id)
+        log.info("Watermark removed from “%s” (%d of %d today)", item["title"][:60], n, licensing.WATERMARK_REMOVALS)
+        return {"done": True, "n": n, "removals_left": license_state.removals_left()}
+
+    @app.post("/api/items/{item_id}/unwatermark/start")
+    def unwatermark_start(item_id: int):
+        if not db.get_item(item_id):
+            raise HTTPException(404, "Item not found")
+        lic, _ = license_state.current()
+        n = license_state.next_removal()
+        if not lic or lic.tier != "free":
+            raise HTTPException(400, "Only free-plan Shorts carry the watermark")
+        if n is None:
+            raise HTTPException(400, "You've used both free watermark removals for today. Go Pro to drop it for good.")
+        nonce = secrets.token_hex(16)
+        pending_unlocks[nonce] = {"kind": "wm", "item": item_id, "at": time.time()}
+        return {"nonce": nonce, "n": n, "url": license_server.free_url(license_state.device, nonce, "wm", lic.id, n)}
+
+    @app.get("/api/items/{item_id}/unwatermark/{nonce}")
+    def unwatermark_poll(item_id: int, nonce: str):
+        pending = pending_unlocks.get(nonce)
+        if not pending or pending.get("item") != item_id:
+            raise HTTPException(404, "Start again from the Short")
+        try:
+            got = license_server.pickup(nonce)
+        except license_server.LicenseServerError:
+            return {"pending": True}
+        if not got:
+            return {"pending": True}
+        pending_unlocks.pop(nonce, None)
+        return _apply_removal(item_id, got.get("value", ""))
+
+    @app.post("/api/items/{item_id}/unwatermark")
+    def unwatermark_code(item_id: int, body: SecretBody):
+        """The removal code pasted by hand (if the browser couldn't hand it back)."""
+        return _apply_removal(item_id, body.value)
 
     @app.post("/api/items/{item_id}/posted")
     def mark_posted(item_id: int):

@@ -304,6 +304,25 @@ html.resizing, html.resizing * { user-select: none !important; }
 .gate-note { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--white-faint); line-height: 1.8; max-width: 420px;
   animation: fadeIn 0.8s var(--ease-out) 0.5s both; }
 .gate.unlocked .gate-card { animation: none; }
+.gate-plans { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; animation: pageIn 0.8s var(--ease-expo) 0.2s both; }
+.gate-plan { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px 18px 16px; text-align: left; border-radius: 18px;
+  border: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.03); transition: border-color 0.3s, background 0.3s, translate 0.5s var(--ease-out); }
+.gate-plan:hover:not(:disabled) { translate: 0 -2px; border-color: rgba(180, 165, 255, 0.5); background: rgba(138, 120, 240, 0.08); }
+.gate-plan.pro { border-color: rgba(180, 165, 255, 0.35); }
+.gate-plan b { font-size: 18px; font-weight: 500; letter-spacing: -0.03em; }
+.gate-plan > span:not(.tag):not(.arrow) { font-size: 12.5px; color: var(--white-dim); }
+.gate-plan .arrow { position: absolute; top: 16px; right: 16px; color: var(--purple-bright); }
+.gate-plan .tag { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.4px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--white-rule); color: var(--white-dim); }
+.gate-plan .tag.good { color: var(--ok); border-color: rgba(106, 255, 154, 0.35); }
+.gate-have { font-size: 13px; color: var(--white-dim); text-decoration: underline; text-underline-offset: 3px; }
+.gate-wait { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--white-dim); font-size: 14px; line-height: 1.6; }
+.gate-wait b { color: var(--white); font-weight: 500; }
+.gate-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(180, 165, 255, 0.18); border-top-color: var(--purple-bright); animation: spin 0.9s linear infinite; }
+.plan-chip { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(255, 204, 106, 0.35);
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--warn); }
+.plan-chip:hover { background: rgba(255, 204, 106, 0.08); }
+.wm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin: 6px 0 4px; border-radius: 12px; border: 1px dashed rgba(255, 204, 106, 0.35); font-size: 12.5px; color: var(--white-dim); }
+
 
 /* ============================================
    Home: the sticker menu is the main navigation
