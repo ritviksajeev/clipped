@@ -66,6 +66,18 @@ def test_candidates_expire_when_no_longer_trending(tmp_path, sample_clip):
     assert db.get_clip("Clip0")["skip_reason"] == "no longer trending now"
 
 
+def test_failed_and_rejected_clips_do_not_use_up_the_daily_limit(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}, {}, {}],
+                                               cat_settings=CategorySettings(max_clips_per_day=1))
+    engine.fetch_due()
+    # Earlier attempts today that produced nothing (e.g. the missing-cuBLAS failures)
+    for clip_id, status in (("Earlier1", "failed"), ("Earlier2", "rejected")):
+        db.create_item(clip_id, cat["id"], mode="manual", status=status)
+    item = engine.render_step()
+    assert item and item["status"] == "review"
+    assert engine.render_step() is None  # the one real clip fills today's allowance
+
+
 def test_manual_flow_review_approve_upload(tmp_path, sample_clip):
     engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}])
     engine.fetch_due()

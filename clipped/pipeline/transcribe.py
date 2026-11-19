@@ -88,6 +88,14 @@ def clean_words(words: list[Word]) -> list[Word]:
     return out
 
 
+GPU_ERROR_HINTS = ("cublas", "cudnn", "cuda", "libcudart", "cufft", "nvrtc")
+
+
+def is_gpu_library_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(hint in text for hint in GPU_ERROR_HINTS)
+
+
 class Transcriber(Protocol):
     def transcribe(self, media_path: Path, language: str = "") -> Transcript: ...
 
@@ -105,21 +113,43 @@ class WhisperTranscriber:
         self.compute_type = compute_type
         self.download_root = download_root
 
+    _gpu_broken = False  # set once CUDA libraries turn out to be missing on this machine
+
+    def _device(self) -> tuple[str, str]:
+        if self.device != "cpu" and WhisperTranscriber._gpu_broken:
+            return "cpu", "int8"
+        compute = "default" if self.compute_type == "auto" else self.compute_type
+        return self.device, compute
+
     def _model(self):
-        key = (self.model_size, self.device, self.compute_type, str(self.download_root))
+        device, compute = self._device()
+        key = (self.model_size, device, compute, str(self.download_root))
         with self._lock:
             if key not in self._models:
                 from faster_whisper import WhisperModel  # heavy import, keep lazy
 
-                compute = self.compute_type
-                if compute == "auto":
-                    compute = "default"
                 log.info("Loading whisper model '%s' (first run downloads it once)", self.model_size)
                 self._models[key] = WhisperModel(
-                    self.model_size, device=self.device, compute_type=compute,
+                    self.model_size, device=device, compute_type=compute,
                     download_root=str(self.download_root) if self.download_root else None,
                 )
             return self._models[key]
+
+    def _run(self, samples, language: str):
+        model = self._model()
+        segments, info = model.transcribe(
+            samples,
+            language=language or None,
+            word_timestamps=True,
+            vad_filter=True,
+            beam_size=5,
+            condition_on_previous_text=False,
+        )
+        words: list[Word] = []
+        for segment in segments:  # decoding happens lazily here, so GPU errors surface here too
+            for w in segment.words or []:
+                words.append(Word(float(w.start), float(w.end), w.word, float(getattr(w, "probability", 1.0))))
+        return words, info
 
     def transcribe(self, media_path: Path, language: str = "") -> Transcript:
         # Decode with our own ffmpeg and hand whisper the samples. Passing a path
@@ -133,19 +163,16 @@ class WhisperTranscriber:
         if samples.size < SAMPLE_RATE // 4:
             log.info("No usable audio track; skipping transcription")
             return Transcript(words=[], language=language)
-        model = self._model()
-        segments, info = model.transcribe(
-            samples,
-            language=language or None,
-            word_timestamps=True,
-            vad_filter=True,
-            beam_size=5,
-            condition_on_previous_text=False,
-        )
-        words: list[Word] = []
-        for segment in segments:
-            for w in segment.words or []:
-                words.append(Word(float(w.start), float(w.end), w.word, float(getattr(w, "probability", 1.0))))
+        try:
+            words, info = self._run(samples, language)
+        except RuntimeError as exc:
+            if self.device == "cpu" or not is_gpu_library_error(exc):
+                raise
+            # An NVIDIA GPU was found but its CUDA libraries (cuBLAS/cuDNN) are not
+            # installed. Whisper runs fine on the CPU, so use that from now on.
+            log.warning("GPU transcription unavailable (%s); using the CPU instead", str(exc)[:120])
+            WhisperTranscriber._gpu_broken = True
+            words, info = self._run(samples, language)
         transcript = Transcript(words=clean_words(words), language=getattr(info, "language", "") or language)
         log.info("Transcribed %d words (%s)", len(transcript.words), transcript.language or "?")
         return transcript

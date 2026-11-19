@@ -153,3 +153,58 @@ def test_audio_cache_roundtrip():
     result = audio.analyze(media.synth_audio())
     clone = audio.AudioAnalysis(**json.loads(json.dumps(result.to_dict(include_envelope=True))))
     assert clone.peak_time == result.peak_time and len(clone.envelope) == len(result.envelope)
+
+
+def test_whisper_falls_back_to_cpu_when_cuda_libraries_are_missing(monkeypatch):
+    """An NVIDIA GPU without cuBLAS installed: 'Library cublas64_12.dll is not found'."""
+    import faster_whisper
+
+    loaded = []
+
+    class W:
+        start, end, word, probability = 0.0, 0.5, " hey", 0.9
+
+    class Seg:
+        words = [W()]
+
+    class FakeModel:
+        def __init__(self, size, device="auto", compute_type="default", **k):
+            loaded.append((device, compute_type))
+            self.device = device
+
+        def transcribe(self, audio_in, **kwargs):
+            def gen():
+                if self.device != "cpu":  # like ctranslate2: fails lazily on first decode
+                    raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+                yield Seg()
+            return gen(), type("Info", (), {"language": "en"})()
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    monkeypatch.setattr(audio, "decode_mono", lambda path, sr=16000: np.zeros(sr * 2, dtype=np.float32))
+    monkeypatch.setattr(WhisperTranscriber, "_gpu_broken", False)
+    WhisperTranscriber._models.clear()
+    result = WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
+    assert [w.text for w in result.words] == ["hey"]
+    assert loaded == [("auto", "default"), ("cpu", "int8")]
+    WhisperTranscriber("tiny").transcribe(Path("clip2.mp4"))  # remembered: no second GPU attempt
+    assert loaded == [("auto", "default"), ("cpu", "int8")]
+    WhisperTranscriber._models.clear()
+
+
+def test_other_whisper_errors_are_not_swallowed(monkeypatch):
+    import faster_whisper
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+        def transcribe(self, audio_in, **kwargs):
+            raise RuntimeError("model file is corrupt")
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    monkeypatch.setattr(audio, "decode_mono", lambda path, sr=16000: np.zeros(sr * 2, dtype=np.float32))
+    monkeypatch.setattr(WhisperTranscriber, "_gpu_broken", False)
+    WhisperTranscriber._models.clear()
+    with pytest.raises(RuntimeError, match="corrupt"):
+        WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
+    WhisperTranscriber._models.clear()

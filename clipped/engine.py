@@ -35,6 +35,7 @@ from .services.youtube import AuthError, QuotaExceeded, UploadRequest, YouTubeCl
 
 log = get_logger("engine")
 
+PRODUCED_STATUSES = ("processing", "review", "ready", "approved", "uploading", "uploaded")
 MAX_PENDING_REVIEWS = 12
 MAX_UPLOAD_ATTEMPTS = 5
 STATS_REFRESH_HOURS = 6
@@ -506,7 +507,10 @@ class Engine:
                 continue
             if mode == "auto" and pending_ready >= gs.schedule.render_ahead:
                 continue
-            if self.db.count_items(category_id=cat["id"], since=since) >= cs.max_clips_per_day:
+            # Only clips that actually came out count: a failed render or a clip you
+            # rejected must not use up the category's daily allowance.
+            if self.db.count_items(category_id=cat["id"], since=since,
+                                   statuses=PRODUCED_STATUSES) >= cs.max_clips_per_day:
                 continue
             factor = learning.diversity_factor(clip.broadcaster_login or clip.broadcaster_name, cat["id"], recent,
                                                window=window, penalty=gs.optimizer.diversity_penalty)
