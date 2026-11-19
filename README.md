@@ -47,16 +47,36 @@ Data and keys live in the `clipped-data` volume. Containers have no OS keychain,
 
 ### From source
 
-Requires Python 3.11+, Node 18+ and ffmpeg with libass.
+Requires Python 3.11+, Node 18+ and ffmpeg with libass (Windows: `winget install --id Gyan.FFmpeg -e`, macOS: `brew install ffmpeg`, Linux: `sudo apt install ffmpeg`).
+
+macOS / Linux:
 
 ```bash
 git clone https://github.com/ritviksajeev/clipped.git && cd clipped
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-(cd frontend && npm ci && npm run build)              # builds the dashboard into clipped/web
-clipped doctor                                      # checks ffmpeg, libass, keychain, whisper
-clipped serve                                       # http://localhost:8000
+(cd frontend && npm ci && npm run build)   # builds the dashboard into clipped/web
+clipped doctor                             # checks ffmpeg, libass, keychain, whisper
+clipped serve                              # http://localhost:8000
 ```
+
+Windows (Command Prompt), one line at a time:
+
+```bat
+git clone https://github.com/ritviksajeev/clipped.git
+cd clipped
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+cd frontend
+npm ci
+npm run build
+cd ..
+clipped doctor
+clipped serve
+```
+
+In a new terminal, run `.venv\Scripts\activate` (or `source .venv/bin/activate`) again before using `clipped`.
 
 ## Setup
 
