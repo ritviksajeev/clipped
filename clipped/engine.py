@@ -572,6 +572,8 @@ class Engine:
             if match and score >= gs.selection.similarity_threshold:
                 raise runner.SkipClip(f"too similar ({score:.0%}) to “{match['title'][:50]}”")
 
+        who = clip.broadcaster_name or clip.id
+        opts.stage = lambda text: self.activity.__setitem__("render", f"{text}: {who}")
         try:
             transcriber = self._transcriber_factory(gs)
             result = runner.process_clip(clip, workdir, transcriber, opts, gate=gate)

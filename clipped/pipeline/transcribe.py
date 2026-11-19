@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -89,6 +90,36 @@ def clean_words(words: list[Word]) -> list[Word]:
 
 
 GPU_ERROR_HINTS = ("cublas", "cudnn", "cuda", "libcudart", "cufft", "nvrtc")
+CUDA_LIBRARIES = {
+    "win32": ("cublas64_12.dll", "cudnn64_9.dll"),
+    "linux": ("libcublas.so.12", "libcudnn.so.9"),
+}
+_cuda_checked: bool | None = None
+
+
+def cuda_libraries_available() -> bool:
+    """Can the CUDA libraries faster-whisper needs actually be loaded?
+
+    An NVIDIA card alone is not enough: without cuBLAS/cuDNN installed the first
+    GPU transcription fails, and a later attempt on a half-initialised CUDA
+    runtime can hang instead of failing. So "auto" only tries the GPU when the
+    libraries load. macOS has no CUDA.
+    """
+    global _cuda_checked
+    if _cuda_checked is None:
+        import ctypes
+        import sys
+
+        names = CUDA_LIBRARIES.get("win32" if sys.platform == "win32" else sys.platform if sys.platform == "linux" else "")
+        ok = bool(names)
+        for name in names or ():
+            try:
+                ctypes.CDLL(name)
+            except OSError:
+                ok = False
+                break
+        _cuda_checked = ok
+    return _cuda_checked
 
 
 def is_gpu_library_error(exc: BaseException) -> bool:
@@ -118,6 +149,8 @@ class WhisperTranscriber:
     def _device(self) -> tuple[str, str]:
         if self.device != "cpu" and WhisperTranscriber._gpu_broken:
             return "cpu", "int8"
+        if self.device == "auto" and not cuda_libraries_available():
+            return "cpu", "int8" if self.compute_type == "auto" else self.compute_type
         compute = "default" if self.compute_type == "auto" else self.compute_type
         return self.device, compute
 
@@ -163,6 +196,10 @@ class WhisperTranscriber:
         if samples.size < SAMPLE_RATE // 4:
             log.info("No usable audio track; skipping transcription")
             return Transcript(words=[], language=language)
+        started = time.monotonic()
+        device = self._device()[0]
+        log.info("Transcribing %.0fs of audio (%s model, %s)…", samples.size / SAMPLE_RATE, self.model_size,
+                 "CPU" if device == "cpu" else "GPU if available")
         try:
             words, info = self._run(samples, language)
         except RuntimeError as exc:
@@ -174,7 +211,8 @@ class WhisperTranscriber:
             WhisperTranscriber._gpu_broken = True
             words, info = self._run(samples, language)
         transcript = Transcript(words=clean_words(words), language=getattr(info, "language", "") or language)
-        log.info("Transcribed %d words (%s)", len(transcript.words), transcript.language or "?")
+        log.info("Transcribed %d words in %.1fs (%s)", len(transcript.words), time.monotonic() - started,
+                 transcript.language or "?")
         return transcript
 
 

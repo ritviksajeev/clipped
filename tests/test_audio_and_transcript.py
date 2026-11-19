@@ -179,9 +179,12 @@ def test_whisper_falls_back_to_cpu_when_cuda_libraries_are_missing(monkeypatch):
                 yield Seg()
             return gen(), type("Info", (), {"language": "en"})()
 
+    import clipped.pipeline.transcribe as tr
+
     monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
     monkeypatch.setattr(audio, "decode_mono", lambda path, sr=16000: np.zeros(sr * 2, dtype=np.float32))
     monkeypatch.setattr(WhisperTranscriber, "_gpu_broken", False)
+    monkeypatch.setattr(tr, "cuda_libraries_available", lambda: True)  # libraries load, but the GPU still fails
     WhisperTranscriber._models.clear()
     result = WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
     assert [w.text for w in result.words] == ["hey"]
@@ -208,3 +211,40 @@ def test_other_whisper_errors_are_not_swallowed(monkeypatch):
     with pytest.raises(RuntimeError, match="corrupt"):
         WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
     WhisperTranscriber._models.clear()
+
+
+def test_auto_device_skips_the_gpu_when_cuda_libraries_are_missing(monkeypatch):
+    """No cuBLAS/cuDNN on the machine: go straight to the CPU, never touch CUDA."""
+    import faster_whisper
+    import clipped.pipeline.transcribe as tr
+
+    loaded = []
+
+    class FakeModel:
+        def __init__(self, size, device="auto", compute_type="default", **k):
+            loaded.append((device, compute_type))
+
+        def transcribe(self, audio_in, **kwargs):
+            return iter([]), type("Info", (), {"language": "en"})()
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    monkeypatch.setattr(audio, "decode_mono", lambda path, sr=16000: np.zeros(sr * 2, dtype=np.float32))
+    monkeypatch.setattr(WhisperTranscriber, "_gpu_broken", False)
+    monkeypatch.setattr(tr, "cuda_libraries_available", lambda: False)
+    WhisperTranscriber._models.clear()
+    WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
+    assert loaded == [("cpu", "int8")]
+    WhisperTranscriber._models.clear()
+
+
+def test_cuda_check_reports_missing_libraries(monkeypatch):
+    import ctypes
+    import clipped.pipeline.transcribe as tr
+
+    def fail(name):
+        raise OSError(f"{name} not found")
+
+    monkeypatch.setattr(tr, "_cuda_checked", None)
+    monkeypatch.setattr(ctypes, "CDLL", fail)
+    assert tr.cuda_libraries_available() is False
+    monkeypatch.setattr(tr, "_cuda_checked", None)

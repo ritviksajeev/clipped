@@ -46,6 +46,14 @@ class ProcessOptions:
     intro: Path | None = None
     outro: Path | None = None
     api_keys: dict = field(default_factory=dict)
+    stage: Callable[[str], None] | None = None  # told "Downloading", "Transcribing", "Rendering"...
+
+    def report(self, text: str) -> None:
+        if self.stage:
+            try:
+                self.stage(text)
+            except Exception:  # progress reporting must never break a render
+                pass
 
     @property
     def all_keywords(self) -> list[str]:
@@ -116,7 +124,9 @@ def acquire(clip: ClipInfo, workdir: Path, source: str | Path | None = None) -> 
 def analyze_clip(clip: ClipInfo, workdir: Path, transcriber: Transcriber, opts: ProcessOptions,
                  source: str | Path | None = None) -> Analysis:
     t0 = time.monotonic()
+    opts.report("Downloading")
     path, clip = acquire(clip, workdir, source)
+    opts.report("Analysing audio")
     info = ffmpeg.probe(path)
     if not clip.duration:
         clip = clip.model_copy(update={"duration": info.duration})
@@ -132,6 +142,7 @@ def analyze_clip(clip: ClipInfo, workdir: Path, transcriber: Transcriber, opts: 
     if transcript_cache.exists():
         transcript = Transcript.load(transcript_cache)
     else:
+        opts.report("Transcribing")
         transcript = transcriber.transcribe(path, opts.whisper.language or clip.language or "")
         transcript.save(transcript_cache)
 
@@ -173,11 +184,15 @@ def render_outputs(analysis: Analysis, workdir: Path, opts: ProcessOptions, hook
 
     out = workdir / "short.mp4"
     tmp = workdir / "short.tmp.mp4"
+    opts.report("Rendering video")
+    started = time.monotonic()
     render.render_video(analysis.source, tmp, info=analysis.info, plan=plan, reframe=opts.reframe,
                         render=opts.render, ass_path=ass_path, workdir=workdir,
                         intro=opts.intro, outro=opts.outro)
     tmp.replace(out)
     out_info = ffmpeg.probe(out)
+    log.info("Rendered %.0fs of video in %.0fs", out_info.duration, time.monotonic() - started)
+    opts.report("Making thumbnail")
 
     peak = plan.map_time(plan.peak_time) or min(1.0, out_info.duration / 2)
     if opts.intro:
@@ -194,6 +209,7 @@ def process_clip(clip: ClipInfo, workdir: Path, transcriber: Transcriber, opts: 
     analysis = analyze_clip(clip, workdir, transcriber, opts, source)
     if gate:
         gate(analysis)  # may raise SkipClip
+    opts.report("Writing titles")
     variants = make_variants(analysis, opts)
     chosen = choose(variants) if choose else 0
     variant = variants[chosen]
