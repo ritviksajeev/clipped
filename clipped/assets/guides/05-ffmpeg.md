@@ -11,7 +11,7 @@ clipped needs an ffmpeg build with **libass**, which burns in the captions. All 
 
 ## macOS
 
-* With Homebrew: `brew install ffmpeg`
+* With Homebrew: `brew install ffmpeg-full` (the plain `ffmpeg` formula no longer includes libass, which captions need; clipped finds `ffmpeg-full` by itself)
 
 ## Linux
 

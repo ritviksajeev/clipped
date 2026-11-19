@@ -78,7 +78,7 @@ def test_app_window_command_is_a_chromeless_window(tmp_path):
 def test_find_app_browser_prefers_edge_on_windows(tmp_path, monkeypatch):
     edge = tmp_path / "x86" / "Microsoft" / "Edge" / "Application" / "msedge.exe"
     edge.parent.mkdir(parents=True)
-    edge.write_text("")
+    edge.write_text("", "utf-8")
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("CLIPPED_BROWSER", raising=False)
     monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "x86"))
@@ -200,7 +200,7 @@ def test_linux_shortcut_entry(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     made = desktop.create_shortcuts()
-    text = made[0].read_text()
+    text = made[0].read_text("utf-8")
     assert made[0].name == "clipped.desktop"
     assert "-m clipped app" in text and "Terminal=false" in text and "icon.png" in text
 
@@ -240,7 +240,7 @@ def test_window_state_roundtrip(tmp_path, monkeypatch):
     assert desktop.load_window_state() == {"width": desktop.WINDOW_SIZE[0], "height": desktop.WINDOW_SIZE[1]}
     desktop.save_window_state(FakeWin())
     assert desktop.load_window_state() == {"width": 1300, "height": 820, "x": 40, "y": 60}
-    (tmp_path / "window.json").write_text('{"width": 200, "height": 99999, "x": -5000, "y": 3}')
+    (tmp_path / "window.json").write_text('{"width": 200, "height": 99999, "x": -5000, "y": 3}', "utf-8")
     state = desktop.load_window_state()
     assert state["width"] == 980 and state["height"] == 3000 and "x" not in state  # clamped, off-screen dropped
 

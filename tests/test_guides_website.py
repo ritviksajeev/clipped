@@ -33,13 +33,13 @@ def test_build_website_renders_every_guide(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "OUT", tmp_path)
     written = {p.name for p in mod.build()}
     assert {f"{s}.html" for s in GUIDE_SLUGS} | {"index.html"} == written
-    html = (tmp_path / "quick-start.html").read_text()
+    html = (tmp_path / "quick-start.html").read_text("utf-8")
     assert 'href="twitch.html"' in html and "#/" not in html
     assert 'target="_blank" rel="noopener"' in html
 
 
 def test_website_download_links_match_release_artifacts():
-    index = (ROOT / "website" / "index.html").read_text()
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    index = (ROOT / "website" / "index.html").read_text("utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text("utf-8")
     for artifact in re.findall(r"releases/latest/download/([\w.-]+)", index):
         assert artifact in workflow

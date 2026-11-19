@@ -103,7 +103,7 @@ def has_libass() -> bool:
     try:
         proc = subprocess.run(
             [require_binary("ffmpeg"), "-hide_banner", "-filters"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
     except Exception:
         return False

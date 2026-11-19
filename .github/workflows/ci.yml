@@ -28,7 +28,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install ffmpeg (macOS)
         if: runner.os == 'macOS'
-        run: brew install ffmpeg
+        # Homebrew's plain ffmpeg no longer includes libass (needed for captions); ffmpeg-full does.
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
       - name: Install ffmpeg (Windows)
         if: runner.os == 'Windows'
         run: choco install ffmpeg -y --no-progress
@@ -50,3 +53,34 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci && npm run build
         working-directory: frontend
+
+  # The native app window on a real Windows desktop (WebView2 + WinForms):
+  # frameless window, title-bar buttons, resizing, tray, shortcuts.
+  windows-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the app UI
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Install clipped
+        run: pip install -e .
+      - name: Native window smoke test
+        timeout-minutes: 6
+        run: python scripts/smoke_native.py
+      - name: Desktop and Start Menu shortcuts
+        shell: pwsh
+        run: |
+          clipped shortcut
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\clipped.lnk")) { throw "Start Menu shortcut missing" }
+      - name: CUDA check never crashes
+        run: python -c "from clipped.pipeline.transcribe import cuda_libraries_available as c; print('CUDA libraries:', c())"

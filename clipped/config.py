@@ -107,6 +107,12 @@ def find_binary(name: str) -> str | None:
         candidate = directory / exe
         if candidate.exists():
             return str(candidate)
+    if sys.platform == "darwin":
+        # Homebrew's ffmpeg-full (the build with libass) is keg-only: not on PATH.
+        for prefix in ("/opt/homebrew", "/usr/local"):
+            candidate = Path(prefix) / "opt" / "ffmpeg-full" / "bin" / exe
+            if candidate.exists():
+                return str(candidate)
     return shutil.which(name)
 
 

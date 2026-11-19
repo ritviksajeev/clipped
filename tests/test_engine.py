@@ -194,7 +194,7 @@ def test_rerender_after_edit_and_reject(tmp_path, sample_clip):
     db.update_item(item["id"], hook_text="NEW HOOK", commentary="my take", needs_rerender=True)
     updated = engine.rerender_item(item["id"])
     assert updated["needs_rerender"] is False
-    ass = (tmp_path / "work" / "Clip0" / "captions.ass").read_text()
+    ass = (tmp_path / "work" / "Clip0" / "captions.ass").read_text("utf-8")
     assert "NEW HOOK" in ass and "my take" in ass
     assert engine.reject_item(item["id"])["status"] == "rejected"
 

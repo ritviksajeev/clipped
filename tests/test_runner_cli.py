@@ -32,7 +32,7 @@ def test_process_clip_end_to_end(tmp_path, sample_clip, transcript, small_render
     assert result.output.video.exists() and result.output.thumbnail.exists()
     assert "Shroud" in result.variant.title and clip.url in result.variant.description
     assert result.analysis.hype > 0.4
-    ass = (tmp_path / "w" / "captions.ass").read_text()
+    ass = (tmp_path / "w" / "captions.ass").read_text("utf-8")
     assert ",Hook," in ass and ",Commentary," in ass
     assert ffmpeg.probe(result.output.video).height == 640
 
@@ -61,7 +61,7 @@ def test_cli_process_one_clip(tmp_path, sample_clip, capsys):
                      "--clip-url", "https://clips.twitch.tv/X", "--layout", "split", "--facecam", "top-right",
                      "--out", str(out)])
     assert code == 0
-    summary = json.loads((out / "metadata.json").read_text())
+    summary = json.loads((out / "metadata.json").read_text("utf-8"))
     assert summary["title"].endswith("| TenZ")
     assert "https://clips.twitch.tv/X" in summary["description"]
     assert ffmpeg.probe(out / "short.mp4").width == 1080

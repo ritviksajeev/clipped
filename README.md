@@ -49,7 +49,7 @@ Data and keys live in the `clipped-data` volume. Containers have no OS keychain,
 
 ### From source
 
-Requires Python 3.11+, Node 18+ and ffmpeg with libass (Windows: `winget install --id Gyan.FFmpeg -e`, macOS: `brew install ffmpeg`, Linux: `sudo apt install ffmpeg`).
+Requires Python 3.11+, Node 18+ and ffmpeg with libass (Windows: `winget install --id Gyan.FFmpeg -e`, macOS: `brew install ffmpeg-full` (plain `ffmpeg` lacks libass), Linux: `sudo apt install ffmpeg`).
 
 macOS / Linux:
 

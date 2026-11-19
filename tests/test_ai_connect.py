@@ -126,8 +126,8 @@ def test_ollama_not_running_and_remote_urls_refused():
 def _write_profile(base, name="default"):
     (base / "configs").mkdir(parents=True, exist_ok=True)
     (base / "credentials").mkdir(parents=True, exist_ok=True)
-    (base / "configs" / f"{name}.json").write_text(json.dumps({"authentication": {"type": "user_oauth"}}))
-    (base / "credentials" / f"{name}.json").write_text(json.dumps({"access_token": "tok"}))
+    (base / "configs" / f"{name}.json").write_text(json.dumps({"authentication": {"type": "user_oauth"}}), "utf-8")
+    (base / "credentials" / f"{name}.json").write_text(json.dumps({"access_token": "tok"}), "utf-8")
 
 
 def test_anthropic_profile_detection(tmp_path, monkeypatch):
@@ -135,7 +135,7 @@ def test_anthropic_profile_detection(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_PROFILE", raising=False)
     assert ai.anthropic_profile()["signed_in"] is False
     _write_profile(tmp_path, "work")
-    (tmp_path / "active_config").write_text("work\n")
+    (tmp_path / "active_config").write_text("work\n", "utf-8")
     info = ai.anthropic_profile()
     assert info["signed_in"] is True and info["profile"] == "work"
     monkeypatch.setenv("ANTHROPIC_PROFILE", "../../etc")  # never escapes the config dir
