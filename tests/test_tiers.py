@@ -171,6 +171,7 @@ def test_free_day_through_the_app_api(tmp_path, isolated_home, signer, monkeypat
 
     monkeypatch.setattr(device, "device_id", lambda: HERE)
     handed = {}
+    monkeypatch.setattr(license_server, "server", lambda transport=None: "https://licence.test/clipped")
     monkeypatch.setattr(license_server, "pickup", lambda nonce: handed.get(nonce))
     app = create_app(db=Database(tmp_path / "db.sqlite"), store=KeyStore(), allowed_hosts={"testserver"}, autostart=False)
     with TestClient(app) as c:
@@ -181,6 +182,12 @@ def test_free_day_through_the_app_api(tmp_path, isolated_home, signer, monkeypat
         handed[start["nonce"]] = {"kind": "day", "value": licensing.issue(signer, "day", device=HERE)}
         done = c.get(f"/api/license/free/{start['nonce']}").json()
         assert done["done"] and done["tier"] == "free" and done["removals_left"] == 2
+        # Before free days are switched on, the app says so instead of opening a dead page
+        def not_live(transport=None):
+            raise license_server.LicenseServerError(license_server.NOT_LIVE, "not_live")
+        monkeypatch.setattr(license_server, "server", not_live)
+        r = c.post("/api/license/free", headers=H)
+        assert r.status_code == 503 and "aren't switched on yet" in r.json()["detail"]
         assert c.get("/api/status").status_code == 200
         # a Pro key that's in use elsewhere comes back as 409 with a code the UI can act on
         def busy(key, device, force=False):

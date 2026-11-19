@@ -165,8 +165,8 @@ Learning starts after 6 uploads (titles) and 12 uploads (timing) have been live 
 * Everything runs locally. The SQLite database, rendered videos and logs live in your user data folder (shown in **Settings → About**), or in `CLIPPED_HOME` if set.
 * Keys are stored in the OS keychain. If none is available (headless Linux, Docker), they go in an owner-only file and the dashboard says so. Keys are never logged; known secrets and token-shaped strings are redacted from every log line.
 * The local API is write-only for secrets (it returns only "set" plus the last 4 characters), binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding), and requires a custom header on every state-changing request (CSRF).
-* Licence checks go to `evzero.org/api/clipped`: the key, a one-way hash of the operating system's machine id (16 hex characters, see `clipped/device.py`) and, while a free day is being unlocked, a random one-time code. Nothing else.
-* Network destinations: `evzero.org` (licence), `api.twitch.tv`, `id.twitch.tv`, Twitch clip CDNs (via yt-dlp), `oauth2.googleapis.com`, `www.googleapis.com`, `youtubeanalytics.googleapis.com`, `huggingface.co` (one-time whisper model download), and `api.anthropic.com` / `api.openai.com` only if you enable AI titles.
+* Licence checks go to the clipped licence server (its address comes from `evzero.org/clipped/api.json`): the key, a one-way hash of the operating system's machine id (16 hex characters, see `clipped/device.py`) and, while a free day is being unlocked, a random one-time code. Nothing else.
+* Network destinations: `evzero.org` and the licence server it names, `api.twitch.tv`, `id.twitch.tv`, Twitch clip CDNs (via yt-dlp), `oauth2.googleapis.com`, `www.googleapis.com`, `youtubeanalytics.googleapis.com`, `huggingface.co` (one-time whisper model download), and `api.anthropic.com` / `api.openai.com` only if you enable AI titles.
 
 ## Responsibility
 
@@ -216,7 +216,7 @@ The app opens on a welcome screen with two choices, plus "I have a key".
 
 **How keys work.** A key is a small signed record (plan, issue date, expiry, a random id, and for day keys the computer it belongs to) plus an Ed25519 signature, written as `CLIP-XXXXX-…` in Crockford base32. The app embeds only the public key (`clipped/licensing.py`), so nothing in the app or this repository can make a key. evzero.org signs day keys, Pro certificates (which say "this Pro key is good on this computer until …") and watermark removals with the same private key, so a fake server can't unlock anything. The local API refuses to work without a valid key (HTTP 402), and so does `clipped process`.
 
-* The licence server is a set of Vercel functions in the website repo (`ritviksajeev/ev`, `api/clipped/`), with Upstash Redis for state and Razorpay Subscriptions for payments.
+* The licence server lives in the website repo (`ritviksajeev/ev`, `api/clipped/`): Vercel functions, or one Node process with `node api/_lib/serve.js` on any host, with Upstash Redis for state and Razorpay Subscriptions for payments. The app finds it through `evzero.org/clipped/api.json`, so it can move hosts without an app update.
 * `scripts/license_admin.py issue --key <private key file> --plan lifetime|monthly` makes **gift keys** for testers and friends. They're checked offline and aren't locked to a computer, so give them out sparingly. The private key lives only with evzero; it is never committed (`*.pem` is ignored).
 * `scripts/license_admin.py show <key>` decodes and verifies a key.
 

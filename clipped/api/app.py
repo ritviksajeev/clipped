@@ -388,9 +388,17 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         log.info("Licence removed from this computer")
         return license_view("")
 
+    def server_live() -> None:
+        """Before sending someone to watch ads, make sure the licence server can pay out."""
+        try:
+            license_server.server()
+        except license_server.LicenseServerError as exc:
+            raise HTTPException(503, str(exc)) from None
+
     @app.post("/api/license/free")
     def license_free_start():
         """A free day: open evzero.org/clipped/free in the browser; the app collects the key itself."""
+        server_live()
         nonce = secrets.token_hex(16)
         pending_unlocks[nonce] = {"kind": "day", "at": time.time()}
         return {"nonce": nonce, "url": license_server.free_url(license_state.device, nonce)}
@@ -415,7 +423,6 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         log.info("Free day started")
         return {"done": True, **license_view("")}
 
-    # ------------------------------------------------------------------ secrets
     # ------------------------------------------------------------------ secrets
     @app.get("/api/secrets")
     def secrets_status():
@@ -917,6 +924,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             raise HTTPException(400, "Only free-plan Shorts carry the watermark")
         if n is None:
             raise HTTPException(400, "You've used both free watermark removals for today. Go Pro to drop it for good.")
+        server_live()
         nonce = secrets.token_hex(16)
         pending_unlocks[nonce] = {"kind": "wm", "item": item_id, "at": time.time()}
         return {"nonce": nonce, "n": n, "url": license_server.free_url(license_state.device, nonce, "wm", lic.id, n)}

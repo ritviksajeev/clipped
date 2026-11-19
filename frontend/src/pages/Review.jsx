@@ -20,6 +20,7 @@ function Editor({ item, onChanged, onRemoved }) {
   const { notify, refreshStatus, status, license, checkLicense } = useApp()
   const downloadOnly = !!status?.download_only
   const [wmWait, setWmWait] = useState(null)
+  const [wmCode, setWmCode] = useState('') // the removal code, pasted by hand if the browser couldn't hand it back
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState('')
   const [frameKey, setFrameKey] = useState(0)
@@ -36,6 +37,12 @@ function Editor({ item, onChanged, onRemoved }) {
   }, [item.id, item.updated_at])
 
   const afterRemoval = useRef(null) // set below: refresh the preview once the clean render lands
+  const removed = (r) => {
+    setWmWait(null); setWmCode('')
+    notify(`Watermark removed (${r.n} of 2 today). Re-rendering…`, 'ok')
+    checkLicense()
+    afterRemoval.current?.()
+  }
   useEffect(() => {
     if (!wmWait) return
     const started = Date.now()
@@ -43,10 +50,8 @@ function Editor({ item, onChanged, onRemoved }) {
       try {
         const r = await api.get(`/api/items/${item.id}/unwatermark/${wmWait}`)
         if (r.done) {
-          clearInterval(t); setWmWait(null)
-          notify(`Watermark removed (${r.n} of 2 today). Re-rendering…`, 'ok')
-          checkLicense()
-          afterRemoval.current?.()
+          clearInterval(t)
+          removed(r)
         }
       } catch (e) { clearInterval(t); setWmWait(null); notify(e.message, 'error') }
       if (Date.now() - started > 15 * 60 * 1000) { clearInterval(t); setWmWait(null) }
@@ -143,6 +148,11 @@ function Editor({ item, onChanged, onRemoved }) {
     setWmWait(r.nonce)
     openPage(r.url)
   })
+  const submitRemovalCode = (e) => {
+    e.preventDefault()
+    if (!wmCode.trim()) return
+    run('wm', async () => removed(await api.post(`/api/items/${item.id}/unwatermark`, { value: wmCode.trim() })))
+  }
   afterRemoval.current = waitForRender
   const subtitlesOn = item.analysis?.subtitles !== false
   const setSubtitles = (on) => run('subtitles', async () => {
@@ -219,7 +229,14 @@ function Editor({ item, onChanged, onRemoved }) {
         </Field>
         {watermarked && editable && license?.tier === 'free' && (
           <div className="wm-row">
-            {wmWait ? <span>Watch the ads in your browser; the watermark comes off by itself.</span>
+            {wmWait ? <>
+                <span>Watch the ads in your browser; the watermark comes off by itself. Or paste the code the page shows:</span>
+                <form className="wm-code" onSubmit={submitRemovalCode}>
+                  <input value={wmCode} onChange={(e) => setWmCode(e.target.value)} placeholder="eyJ0Ijoid20i…" spellCheck={false} autoComplete="off" aria-label="Removal code" />
+                  <button className="btn small" disabled={!!busy || !wmCode.trim()}>Use code</button>
+                  <button type="button" className="btn small ghost" onClick={() => { setWmWait(null); setWmCode('') }}>Cancel</button>
+                </form>
+              </>
               : license.removals_left > 0
                 ? <><span>This Short has the free-plan watermark.</span>
                   <button className="btn small" disabled={!!busy} onClick={removeWatermark}>Remove it · {license.removals_left} left today</button></>
