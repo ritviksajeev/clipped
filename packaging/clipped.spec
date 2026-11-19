@@ -4,7 +4,9 @@
 #   2. python scripts/fetch_ffmpeg.py              (puts ffmpeg + ffprobe in packaging/bin)
 #   3. pyinstaller packaging/clipped.spec --noconfirm
 #
-# Output: dist/clipped/  (a folder with the clipped executable)
+# Output: dist/clipped/ with two executables sharing one set of libraries:
+#   clipped      the desktop app (no console window; opens clipped in its own window)
+#   clipped-cli  the same program with a console, for `clipped-cli doctor`, `process` etc.
 # ruff: noqa
 import sys
 from pathlib import Path
@@ -43,26 +45,32 @@ hiddenimports += collect_submodules("keyring.backends")
 hiddenimports += collect_submodules("yt_dlp.extractor")
 hiddenimports += collect_submodules("clipped")
 hiddenimports += ["anthropic", "multipart", "python_multipart", "tzdata"]
+if sys.platform == "darwin":
+    d, b, h = collect_all("webview")  # native window on macOS
+    datas += d
+    binaries += b
+    hiddenimports += h
 datas += collect_data_files("tzdata")
 
-a = Analysis(
-    [str(ROOT / "packaging" / "launcher.py")],
-    pathex=[str(ROOT)],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
-    excludes=["tkinter", "matplotlib", "pytest", "IPython", "torch", "tensorflow"],
-    noarchive=False,
-)
-pyz = PYZ(a.pure)
+def analysis(script):
+    return Analysis(
+        [str(ROOT / "packaging" / script)],
+        pathex=[str(ROOT)],
+        binaries=binaries,
+        datas=datas,
+        hiddenimports=hiddenimports,
+        excludes=["tkinter", "matplotlib", "pytest", "IPython", "torch", "tensorflow"],
+        noarchive=False,
+    )
+
+
 icon = ROOT / "packaging" / ("icon.ico" if sys.platform == "win32" else "icon.icns")
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="clipped",
-    console=True,  # the console window is how you see it running and how you quit it
-    icon=str(icon) if icon.exists() else None,
-)
-coll = COLLECT(exe, a.binaries, a.datas, name="clipped")
+icon = str(icon) if icon.exists() else None
+
+app_a = analysis("app_launcher.py")
+cli_a = analysis("launcher.py")
+app_exe = EXE(PYZ(app_a.pure), app_a.scripts, [], exclude_binaries=True, name="clipped",
+              console=False, icon=icon)  # a desktop app: no console window
+cli_exe = EXE(PYZ(cli_a.pure), cli_a.scripts, [], exclude_binaries=True, name="clipped-cli",
+              console=True, icon=icon)
+coll = COLLECT(app_exe, cli_exe, app_a.binaries, app_a.datas, cli_a.binaries, cli_a.datas, name="clipped")

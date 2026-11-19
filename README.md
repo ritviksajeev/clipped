@@ -8,12 +8,14 @@ It runs on **your computer** with **your own API keys**. There is no clipped ser
 
 ## Features
 
-* **Any Twitch category**, such as Valorant, CS2, GTA, Fortnite or Just Chatting. Search and add as many as you like, each with its own minimum views, clip age window, language, daily limit, streamer allowlist/blocklist, hashtags and manual/auto mode.
+* **A real desktop app:** double-click and clipped opens in its own window (no browser tab). Close the window to quit. `clipped shortcut` adds it to your Desktop and Start Menu.
+* **Any Twitch category**, such as Valorant, CS2, GTA, Fortnite or Just Chatting. Search and add as many as you like, each with its own minimum views, discovery mode, language, daily limit, streamer allowlist/blocklist, hashtags and manual/auto mode.
+* **Trending now or top of the last 24h:** pick how clips are found, globally or per category. *Trending* takes clips from the last few hours that are gaining views fastest right now (view counts are re-checked on every fetch, so a clip that starts blowing up jumps the queue). *Top 24h* takes the most-viewed clips created in the last 24 hours.
 * **Full pipeline per clip:** fetch top clips → dedupe (never the same clip twice, nor the same moment clipped by someone else) → download (yt-dlp) → transcribe locally (faster-whisper, word timestamps) → **burned-in captions** (always on: word-level, large bold text, current word highlighted with a pop animation, configurable font/colours/position, kept inside the Shorts safe area) → reframe to 9:16 (blurred-background fill, facecam/gameplay split, or centre crop) → hook → title/description/hashtags → thumbnail → upload.
 * **Hooks:** trims dead air, cuts long silences, opens with a short flash-forward to the loudest moment, and shows on-screen hook text for the first 2 seconds.
 * **Credit is mandatory:** the streamer's name, a link to their channel, and a link to the original clip are always in the description, and the name goes in the title too. Your edits can't remove them.
 * **Manual approval (default):** a review queue with video preview, 2-3 title variants, and editable title, description, hashtags, hook, thumbnail and commentary. Approve, reject or re-render.
-* **Auto mode:** upload interval (30 min / 2 h / 6 h / 24 h / custom), daily cap, minimum gap, quiet hours and "pause until". It ranks clips by view velocity, ideal length (15-45 s) and hype (audio loudness peaks plus transcript keywords), and skips clips that are too long, too quiet or too similar to recent uploads.
+* **Auto mode:** upload interval (30 min / 2 h / 6 h / 24 h / custom), daily cap, minimum gap, quiet hours and "pause until". It ranks clips by your discovery mode (current view velocity, or total views for top-24h), ideal length (15-45 s) and hype (audio loudness peaks plus transcript keywords), and skips clips that are too long, too quiet or too similar to recent uploads.
 * **Learns from your channel:** stores views and retention for every upload (YouTube Data + Analytics APIs), learns which title style works (Thompson sampling) and which posting hours perform best, then favours them. It also spreads uploads across streamers and categories. A **"What's working"** page shows the results.
 * **Dashboard:** big Start/Stop, status, next-upload countdown, live logs, review queue, upload history with YouTube links and stats, and YouTube API quota usage with automatic backoff and pause-until-reset.
 * **Safety:** a one-time responsibility notice before Auto mode, "approved streamers only" for Auto mode (on by default), rate limits, and optional intro/outro/commentary so uploads aren't pure reposts.
@@ -33,7 +35,7 @@ Download the latest build from the [Releases page](https://github.com/ritviksaje
 | macOS Intel | `clipped-macos-x64.zip` | same as above |
 | Linux x64 | `clipped-linux-x64.tar.gz` | `./clipped/clipped` |
 
-A console window opens and the dashboard opens at **http://localhost:8000**. Keep the window open while clipped runs; close it to quit.
+clipped opens in its own window. On Windows that is a Microsoft Edge app window (Edge ships with Windows, so nothing else is installed); on macOS a native window; on Linux a Chrome/Chromium/Edge app window, or a browser tab if none is installed. Keep it open while clipped works (auto uploads happen while it runs); close it to quit. `clipped-cli` is the same program with a console, for `clipped-cli doctor` and the other commands below.
 
 ### Docker
 
@@ -57,7 +59,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 (cd frontend && npm ci && npm run build)   # builds the dashboard into clipped/web
 clipped doctor                             # checks ffmpeg, libass, keychain, whisper
-clipped serve                              # http://localhost:8000
+clipped                                    # opens the clipped app window
+clipped shortcut                           # optional: Desktop + app-menu shortcut
 ```
 
 Windows (Command Prompt), one line at a time:
@@ -73,8 +76,11 @@ npm ci
 npm run build
 cd ..
 clipped doctor
-clipped serve
+clipped
+clipped shortcut
 ```
+
+`clipped` opens the app window; `clipped shortcut` adds **clipped** to your Desktop and Start Menu so next time you just double-click it. (`clipped serve` still runs it in a normal browser tab at http://localhost:8000.)
 
 In a new terminal, run `.venv\Scripts\activate` (or `source .venv/bin/activate`) again before using `clipped`.
 
@@ -109,10 +115,14 @@ Your Google Cloud project won't be "verified" by Google, and it doesn't need to 
 
 ### 3. Optional: AI titles
 
-Free templates work out of the box. To use AI-written variants, add your own key under **Settings → Connections → AI** and choose the provider under **Settings → Titles & AI**:
+Free templates work out of the box. To use AI-written variants, open **Settings → Connections → AI titles** and click one button:
 
-* **Anthropic:** create a key at <https://console.anthropic.com/>. The default model is `claude-opus-5-5`. Set `claude-haiku-5-5` for the cheapest option. clipped requests low effort and structured JSON output, and turns on Anthropic's server-side refusal fallback for models that support it. If a request is declined, it falls back to the templates.
-* **OpenAI:** create a key at <https://platform.openai.com/api-keys> and set a model your account can use.
+* **Sign in with Anthropic (Claude):** uses the free Anthropic CLI (`ant`). Your browser opens, you approve, and the CLI saves a sign-in that the official Anthropic library refreshes by itself, so clipped never handles a key. This is an Anthropic Console account billed per use (add credit at <https://console.anthropic.com/>). The default model is `claude-opus-5-5`; `claude-haiku-5-5` is the cheapest. clipped requests low effort and structured JSON output, and turns on Anthropic's server-side refusal fallback for models that support it.
+* **Connect OpenRouter:** approve clipped on openrouter.ai (OAuth PKCE) and it receives a key made just for clipped, stored in your keychain. One account covers Claude, GPT, Gemini, Llama and free models; the default `openrouter/auto` lets OpenRouter choose.
+* **Ollama:** free and local. Install it from <https://ollama.com>, `ollama pull llama3.2`, and clipped detects it.
+* **Or paste a key:** Anthropic (`sk-ant-…`) or OpenAI keys still work under *…or paste an API key instead*.
+
+Claude.ai Pro/Max and ChatGPT Plus chat subscriptions can't be used by other apps. If anything fails, clipped falls back to the templates.
 
 ### 4. Pick categories and press Start
 
@@ -126,7 +136,10 @@ clipped process clip.mp4 --streamer TenZ --streamer-login tenz \
     --title "1v4 clutch" --game VALORANT --clip-url https://clips.twitch.tv/... \
     --layout split --facecam top-right --commentary "watch his crosshair"
 clipped process <clip> --upload --privacy unlisted              # also upload (needs Connect YouTube)
-clipped serve [--port 8000] [--no-browser]                       # dashboard
+clipped                                                          # the app window (same as `clipped app`)
+clipped app --window browser                                     # app | native | browser
+clipped serve [--port 8000] [--no-browser]                       # dashboard in a browser tab
+clipped shortcut                                                 # Desktop / Start Menu / app-menu shortcut
 clipped doctor                                                   # environment check
 ```
 
@@ -159,7 +172,8 @@ clipped is a tool. You are responsible for having permission to repost streamers
 
 ```
 clipped/
-  cli.py             command line (process / serve / doctor)
+  cli.py             command line (app / process / serve / doctor / shortcut)
+  desktop.py         app window (Edge/Chrome app mode or pywebview), heartbeat, shortcuts
   server.py          uvicorn launcher (localhost only)
   api/app.py         FastAPI routes + security middleware + serves the dashboard
   engine.py          Start/Stop engine: fetch → render → schedule → upload → stats
@@ -169,7 +183,7 @@ clipped/
   models.py          pydantic settings/models
   pipeline/          download, audio, transcribe, hooks, captions, render, metadata, thumbnail, runner
   optimizer/         ranking, similarity, learning (bandit, hours, diversity), timing, insights
-  services/          twitch.py, youtube.py, quota.py
+  services/          twitch.py, youtube.py, quota.py, ai.py (one-click AI connections)
   assets/            fonts (Inter, OFL) and setup guides (Markdown)
 frontend/            React + Vite dashboard (builds into clipped/web); src/fx/ holds the motion layer
 website/             static landing page + setup guides (GitHub Pages / Netlify)

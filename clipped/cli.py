@@ -81,8 +81,9 @@ def cmd_process(args: argparse.Namespace) -> int:
 
     api_keys = {}
     if meta.provider != "template":
-        store = KeyStore()
-        api_keys = {"anthropic_api_key": store.get("anthropic_api_key"), "openai_api_key": store.get("openai_api_key")}
+        from .services import ai
+
+        api_keys = ai.credentials(KeyStore())
 
     styles = [args.style] + [s for s in ("hype", "question", "descriptive", "streamer") if s != args.style] \
         if args.style else ["hype", "question", "descriptive"]
@@ -157,6 +158,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_app(args: argparse.Namespace) -> int:
+    from .desktop import run_app
+
+    return run_app(port=args.port, window=args.window)
+
+
+def cmd_shortcut(args: argparse.Namespace) -> int:
+    from .desktop import create_shortcuts
+
+    made = create_shortcuts()
+    if not made:
+        print("Shortcuts are made for Windows and Linux. On macOS, drag the clipped app to Applications.")
+        return 1
+    for path in made:
+        print(f"Created {path}")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from .server import serve
 
@@ -185,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--caption-position", choices=["bottom", "middle", "top"])
     p.add_argument("--font-size", type=int)
     p.add_argument("--highlight-color", help="#RRGGBB")
-    p.add_argument("--provider", choices=["template", "anthropic", "openai"])
+    p.add_argument("--provider", choices=["template", "anthropic", "openai", "openrouter", "ollama"])
     p.add_argument("--style", choices=["hype", "question", "descriptive", "streamer"], help="preferred title style")
     p.add_argument("--hashtag", action="append", help="extra hashtag (repeatable)")
     p.add_argument("--commentary", help="commentary text shown on screen and added to the description")
@@ -198,7 +217,16 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("doctor", help="check that everything needed is installed")
     d.set_defaults(func=cmd_doctor)
 
-    s = sub.add_parser("serve", help="run the dashboard")
+    a = sub.add_parser("app", help="open clipped in its own window (the default)")
+    a.add_argument("--port", type=int, default=config.DEFAULT_PORT)
+    a.add_argument("--window", choices=["auto", "app", "native", "browser"], default="auto",
+                   help="app = Edge/Chrome app window, native = pywebview, browser = a normal tab")
+    a.set_defaults(func=cmd_app)
+
+    sc = sub.add_parser("shortcut", help="add clipped to the Desktop and Start Menu")
+    sc.set_defaults(func=cmd_shortcut)
+
+    s = sub.add_parser("serve", help="run the dashboard in your browser (no app window)")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=config.DEFAULT_PORT)
     s.add_argument("--no-browser", action="store_true")
@@ -206,11 +234,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _ensure_streams() -> None:
+    """Started without a console (desktop shortcut, windowed build) there is no
+    stdout/stderr; progress bars in libraries would crash writing to None."""
+    import os
+
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+
+
 def main(argv: list[str] | None = None) -> int:
+    _ensure_streams()
     parser = build_parser()
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        args = parser.parse_args(["serve", *(argv or [])])
+        args = parser.parse_args([*argv, "app"])  # no command: open the app window
     setup_logging(config.logs_dir(), level=10 if args.verbose else 20)
     return int(args.func(args) or 0)
 

@@ -31,6 +31,41 @@ def test_fetch_dedupes_and_filters(tmp_path, sample_clip):
     assert engine.fetch_due() == 0 and twitch.calls == 3
 
 
+def test_fetch_window_follows_discovery_mode(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}])
+    engine.fetch_due()
+    start, end = twitch.windows[-1]
+    assert end - start == timedelta(hours=6)  # trending (default): last 6 hours
+    db.update_category(cat["id"], settings=CategorySettings(discovery="top24h"))
+    engine.fetch_due(force_category=cat["id"])
+    start, end = twitch.windows[-1]
+    assert end - start == timedelta(hours=24)
+
+
+def test_refetch_updates_views_and_revives_clips_that_grew(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{"views": 1000}, {"views": 20}],
+                                               cat_settings=CategorySettings(min_views=50, max_clips_per_day=5))
+    assert engine.fetch_due() == 1
+    assert db.get_clip("Clip1")["status"] == "skipped"
+    clock.advance(minutes=31)
+    twitch.clips[0] = twitch.clips[0].model_copy(update={"view_count": 4000})
+    twitch.clips[1] = twitch.clips[1].model_copy(update={"view_count": 400})
+    engine.fetch_due()
+    hot = db.get_clip("Clip0")
+    assert hot["view_count"] == 4000
+    assert hot["score_detail"]["recent_velocity"] == pytest.approx(3000 / (31 / 60), rel=0.01)
+    revived = db.get_clip("Clip1")
+    assert revived["status"] == "new" and revived["skip_reason"] == ""
+
+
+def test_candidates_expire_when_no_longer_trending(tmp_path, sample_clip):
+    engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{"hours_old": 5}])
+    engine.fetch_due()
+    clock.advance(hours=5)  # 10h old > 6h window x 1.5
+    assert engine.render_step() is None
+    assert db.get_clip("Clip0")["skip_reason"] == "no longer trending now"
+
+
 def test_manual_flow_review_approve_upload(tmp_path, sample_clip):
     engine, db, twitch, yt, clock, cat = setup(tmp_path, sample_clip, [{}])
     engine.fetch_due()

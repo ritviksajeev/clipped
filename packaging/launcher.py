@@ -1,10 +1,11 @@
-"""Desktop entry point: double-click to start clipped and open the dashboard.
+"""Console entry point (the `clipped-cli` executable).
 
-Runs `clipped serve` by default. Any command-line arguments are passed
-through, so the bundled executable also works as the CLI:
+With no arguments it opens the app window and shows the log here; otherwise it
+is the full CLI:
 
-    clipped process https://clips.twitch.tv/...
-    clipped doctor
+    clipped-cli doctor
+    clipped-cli process https://clips.twitch.tv/...
+    clipped-cli serve          (dashboard in your browser instead of a window)
 """
 
 import multiprocessing
@@ -16,8 +17,9 @@ def main() -> int:
     from clipped.cli import main as cli_main
 
     args = sys.argv[1:]
-    print("clipped is starting. Keep this window open while it runs; close it to quit.", flush=True)
-    return cli_main(args or ["serve"])
+    if not args:
+        print("clipped is starting. Close the clipped window to quit.", flush=True)
+    return cli_main(args or ["app"])
 
 
 if __name__ == "__main__":

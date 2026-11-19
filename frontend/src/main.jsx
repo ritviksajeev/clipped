@@ -13,6 +13,8 @@ import 'lenis/dist/lenis.css'
 import './styles.css'
 import App from './App.jsx'
 import { bootMotion } from './fx/motion.js'
+import { startAppHeartbeat } from './api.js'
 
 createRoot(document.getElementById('root')).render(<App />)
 bootMotion()
+startAppHeartbeat()

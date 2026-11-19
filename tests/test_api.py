@@ -149,3 +149,56 @@ def test_insights_and_guides_and_spa(env):
     assert isinstance(client.get("/api/guides").json(), list)
     assert client.get("/").status_code == 200
     assert client.get("/api/nope").status_code == 404
+
+
+def test_ai_status_and_use_provider(env, tmp_path, monkeypatch):
+    client, engine, db, store, *_ = env
+    monkeypatch.setenv("ANTHROPIC_CONFIG_DIR", str(tmp_path / "anthropic"))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    from clipped.services import ai
+
+    monkeypatch.setattr(ai, "ollama_status", lambda url=None, transport=None: {"running": False, "models": [], "url": url})
+    st = client.get("/api/ai/status").json()
+    assert st["provider"] == "template"
+    assert st["anthropic"]["ready"] is False and st["openrouter"]["connected"] is False
+    assert client.post("/api/ai/use", json={"provider": "openrouter"}, headers=H).status_code == 400
+    assert client.post("/api/ai/use", json={"provider": "nope"}, headers=H).status_code == 400
+    store.set("openrouter_api_key", "sk-or-v1-0123456789abcdef")
+    r = client.post("/api/ai/use", json={"provider": "openrouter"}, headers=H)
+    assert r.status_code == 200 and db.get_global_settings().metadata.provider == "openrouter"
+    assert "0123456789" not in client.get("/api/ai/status").text  # key never returned
+    client.post("/api/ai/openrouter/disconnect", headers=H)
+    assert store.get("openrouter_api_key") is None and db.get_global_settings().metadata.provider == "template"
+
+
+def test_openrouter_connect_callback_saves_key(env, monkeypatch):
+    client, engine, db, store, *_ = env
+    from clipped.services import ai
+
+    r = client.post("/api/ai/openrouter/connect?desktop=true", headers=H).json()
+    assert "callback_url=http%3A%2F%2Flocalhost" in r["url"]
+    monkeypatch.setattr(ai.OpenRouterConnect, "finish", lambda self, code, transport=None: "sk-or-v1-fromoauth1234")
+    page = client.get("/openrouter/callback?code=abc123")
+    assert page.status_code == 200 and "OpenRouter connected" in page.text  # desktop: a page, not the dashboard
+    assert store.get("openrouter_api_key") == "sk-or-v1-fromoauth1234"
+    assert db.get_global_settings().metadata.provider == "openrouter"  # switched from the free templates
+
+
+def test_openrouter_callback_without_pending_flow_fails_safely(env):
+    client, engine, db, store, *_ = env
+    r = client.get("/openrouter/callback?code=abc123", follow_redirects=False)
+    assert r.status_code == 303 and "ai_error" in r.headers["location"]
+    assert store.get("openrouter_api_key") is None
+
+
+def test_youtube_desktop_callback_shows_a_page(env):
+    from urllib.parse import parse_qs, urlparse
+
+    client, *_ = env
+    r = client.get("/oauth2callback?state=unknown&code=x", follow_redirects=False)
+    assert r.status_code == 303  # browser flow: back to the dashboard
+    url = client.get("/api/youtube/connect?desktop=true").json()["url"]
+    state = parse_qs(urlparse(url).query)["state"][0]
+    page = client.get(f"/oauth2callback?state={state}&error=access_denied", follow_redirects=False)
+    assert page.status_code == 400 and "YouTube not connected" in page.text and "access_denied" in page.text

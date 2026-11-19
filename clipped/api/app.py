@@ -36,6 +36,7 @@ from ..logs import get_logger, live_buffer
 from ..models import CategorySettings, ClipInfo, GlobalSettings, ReframeSettings, normalize_hashtags
 from ..optimizer import insights
 from ..pipeline import metadata
+from ..services import ai
 from ..services.twitch import TwitchClient, TwitchError
 from ..services.youtube import AuthError, OAuthFlow, YouTubeClient, YouTubeError
 
@@ -88,6 +89,32 @@ class ClipAdd(BaseModel):
     category_id: Optional[int] = None
 
 
+class ProviderBody(BaseModel):
+    provider: str
+
+
+DONE_PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{title} · clipped</title><style>
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#09090b;color:#f3f0ea;
+font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}}
+main{{max-width:440px;padding:40px 32px;border:1px solid #27272a;border-radius:20px;background:#111113;text-align:center}}
+.dot{{width:14px;height:14px;border-radius:50%;margin:0 auto 18px;background:{color};box-shadow:0 0 24px {color}}}
+h1{{font-size:24px;margin:0 0 8px;font-weight:600}}p{{margin:0;color:#a1a1aa}}
+a{{display:inline-block;margin-top:22px;color:#dcd6ff;font-size:14px}}</style></head>
+<body><main><div class="dot"></div><h1>{title}</h1><p>{message}</p><a href="/#/settings/connections">Back to clipped</a></main></body></html>"""
+
+
+def done_page(title: str, message: str, ok: bool = True) -> HTMLResponse:
+    """Shown after a sign-in that started in the desktop window (in its popup or the system browser)."""
+    import html as _html
+
+    page = DONE_PAGE.format(title=_html.escape(title), message=_html.escape(message),
+                            color="#8a78f0" if ok else "#f87171")
+    if ok:  # a popup opened by the app window closes itself; elsewhere this does nothing
+        page = page.replace("</body>", "<script>setTimeout(function(){window.close()},1500)</script></body>")
+    return HTMLResponse(page, status_code=200 if ok else 400)
+
+
 class PauseBody(BaseModel):
     until: Optional[datetime] = None
 
@@ -118,13 +145,16 @@ def needs_auto_ack(gs: GlobalSettings, categories: list[dict]) -> bool:
 
 
 def create_app(*, db: Database | None = None, store: KeyStore | None = None, engine: Engine | None = None,
-               allowed_hosts: set[str] | None = None, autostart: bool = True) -> FastAPI:
+               allowed_hosts: set[str] | None = None, autostart: bool = True, app_session=None) -> FastAPI:
     db = db or Database(config.db_path())
     store = store or KeyStore()
     engine = engine or Engine(db, store)
     hosts = set(allowed_hosts or DEFAULT_ALLOWED_HOSTS)
     hosts |= {h.strip() for h in os.environ.get("CLIPPED_ALLOWED_HOSTS", "").split(",") if h.strip()}
     pending_auth: dict[str, Any] = {}
+    desktop_flows: set[str] = set()  # sign-ins started from the desktop window finish in the system browser
+    ant_login = ai.AnthropicLogin()
+    openrouter_flow = ai.OpenRouterConnect()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -160,6 +190,16 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
     @app.exception_handler(EngineError)
     async def engine_error(_: Request, exc: EngineError):
         return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    # ------------------------------------------------------------------ desktop window heartbeat
+    @app.post("/app/ping")
+    def app_ping(token: str = "", bye: bool = False, away: bool = False):
+        # Outside /api so navigator.sendBeacon (which cannot set headers) works
+        # when the window closes; the per-launch token stops other sites from
+        # faking it.
+        if app_session is None or not app_session.ping(token, bye=bye, away=away):
+            raise HTTPException(404, "Not found")
+        return {"ok": True}
 
     # ------------------------------------------------------------------ status & engine
     @app.get("/api/status")
@@ -356,7 +396,7 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
                 "auth_problem": engine.auth_problem}
 
     @app.get("/api/youtube/connect")
-    def youtube_connect(request: Request):
+    def youtube_connect(request: Request, desktop: bool = False):
         redirect_uri = str(request.base_url).rstrip("/") + "/oauth2callback"
         try:
             flow = OAuthFlow(store.get("google_client_id") or "", store.get("google_client_secret") or "", redirect_uri)
@@ -367,15 +407,24 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
         for key in [k for k, v in pending_auth.items() if now - v.created > 900]:
             pending_auth.pop(key, None)
         pending_auth[pending.state] = pending
+        if desktop:
+            desktop_flows.add(pending.state)
         return {"url": url, "redirect_uri": redirect_uri}
 
     @app.get("/oauth2callback")
     def oauth_callback(state: str = "", code: str = "", error: str = ""):
         pending = pending_auth.pop(state, None)
-        if error or not pending or not code:
-            reason = error or ("expired or unknown sign-in attempt" if not pending else "no code returned")
+        desktop = state in desktop_flows
+        desktop_flows.discard(state)
+
+        def fail(reason: str):
             log.warning("YouTube connect failed: %s", reason)
+            if desktop:
+                return done_page("YouTube not connected", f"{reason}. Go back to clipped and try again.", ok=False)
             return RedirectResponse(f"/#/settings?youtube_error={reason}", status_code=303)
+
+        if error or not pending or not code:
+            return fail(error or ("expired or unknown sign-in attempt" if not pending else "no code returned"))
         try:
             flow = OAuthFlow(store.get("google_client_id") or "", store.get("google_client_secret") or "",
                              pending.redirect_uri)
@@ -390,9 +439,95 @@ def create_app(*, db: Database | None = None, store: KeyStore | None = None, eng
             finally:
                 yt.close()
         except (AuthError, YouTubeError) as exc:
-            log.error("YouTube connect failed: %s", exc)
-            return RedirectResponse(f"/#/settings?youtube_error={str(exc)[:200]}", status_code=303)
+            return fail(str(exc)[:200])
+        if desktop:
+            return done_page("YouTube connected", "You can close this tab and go back to clipped.")
         return RedirectResponse("/#/settings?youtube=connected", status_code=303)
+
+    # ------------------------------------------------------------------ AI connections (titles)
+    def use_provider_if_unset(provider: str) -> None:
+        gs = db.get_global_settings()
+        if gs.metadata.provider == "template":
+            gs.metadata.provider = provider
+            db.save_global_settings(gs)
+            log.info("Titles will now be written by %s", provider)
+
+    @app.get("/api/ai/status")
+    def ai_status():
+        gs = db.get_global_settings()
+        keys = store.status()
+        profile = ai.anthropic_profile()
+        login = ant_login.snapshot()
+        if login["state"] == "done":
+            use_provider_if_unset("anthropic")
+            gs = db.get_global_settings()
+        return {
+            "provider": gs.metadata.provider,
+            "anthropic": {**profile, "api_key": keys["anthropic_api_key"]["set"], "env": ai.anthropic_env_key(),
+                          "login": login, "ready": profile["signed_in"] or keys["anthropic_api_key"]["set"]
+                          or ai.anthropic_env_key()},
+            "openrouter": {"connected": keys["openrouter_api_key"]["set"], "hint": keys["openrouter_api_key"]["hint"]},
+            "openai": {"ready": keys["openai_api_key"]["set"]},
+            "ollama": ai.ollama_status(gs.metadata.ollama_url),
+        }
+
+    @app.post("/api/ai/anthropic/login")
+    def anthropic_login():
+        try:
+            return ant_login.start()
+        except ai.AIConnectError as exc:
+            raise HTTPException(400, str(exc))
+        except OSError as exc:
+            raise HTTPException(500, f"Could not start the Anthropic CLI: {exc}")
+
+    @app.post("/api/ai/openrouter/connect")
+    def openrouter_connect(request: Request, desktop: bool = False):
+        # OpenRouter documents localhost callbacks for local apps, so use that name.
+        port = request.url.port or 80
+        callback = f"http://localhost:{port}/openrouter/callback"
+        return {"url": openrouter_flow.start(callback, desktop)}
+
+    @app.get("/openrouter/callback")
+    def openrouter_callback(code: str = "", error: str = ""):
+        desktop = openrouter_flow.desktop
+        try:
+            if error or not code:
+                raise ai.AIConnectError(error or "OpenRouter did not return a code")
+            key = openrouter_flow.finish(code)
+        except ai.AIConnectError as exc:
+            log.warning("OpenRouter connect failed: %s", exc)
+            if desktop:
+                return done_page("OpenRouter not connected", str(exc), ok=False)
+            return RedirectResponse(f"/#/settings?ai_error={str(exc)[:200]}", status_code=303)
+        store.set("openrouter_api_key", key)
+        use_provider_if_unset("openrouter")
+        log.info("Connected OpenRouter")
+        if desktop:
+            return done_page("OpenRouter connected", "You can close this tab and go back to clipped.")
+        return RedirectResponse("/#/settings?ai=openrouter", status_code=303)
+
+    @app.post("/api/ai/openrouter/disconnect")
+    def openrouter_disconnect():
+        store.delete("openrouter_api_key")
+        gs = db.get_global_settings()
+        if gs.metadata.provider == "openrouter":
+            gs.metadata.provider = "template"
+            db.save_global_settings(gs)
+        return {"connected": False}
+
+    @app.post("/api/ai/use")
+    def ai_use(body: ProviderBody):
+        status = ai_status()
+        ready = {"template": True, "anthropic": status["anthropic"]["ready"], "openai": status["openai"]["ready"],
+                 "openrouter": status["openrouter"]["connected"], "ollama": status["ollama"]["running"]}
+        if body.provider not in ready:
+            raise HTTPException(400, "Unknown provider")
+        if not ready[body.provider]:
+            raise HTTPException(400, f"Connect {body.provider} first")
+        gs = db.get_global_settings()
+        gs.metadata.provider = body.provider  # type: ignore[assignment]
+        db.save_global_settings(gs)
+        return {"provider": body.provider, "settings": gs.model_dump(mode="json")}
 
     @app.post("/api/youtube/disconnect")
     def youtube_disconnect():

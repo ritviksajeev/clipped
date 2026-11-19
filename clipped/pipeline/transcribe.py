@@ -122,9 +122,20 @@ class WhisperTranscriber:
             return self._models[key]
 
     def transcribe(self, media_path: Path, language: str = "") -> Transcript:
+        # Decode with our own ffmpeg and hand whisper the samples. Passing a path
+        # makes faster-whisper decode through PyAV, whose 19.x release removed an
+        # argument it relies on ("open() got an unexpected keyword argument
+        # 'metadata_errors'"). ffmpeg is already a hard requirement, so this also
+        # means one decoder for everything.
+        from .audio import SAMPLE_RATE, decode_mono
+
+        samples = decode_mono(media_path, SAMPLE_RATE)
+        if samples.size < SAMPLE_RATE // 4:
+            log.info("No usable audio track; skipping transcription")
+            return Transcript(words=[], language=language)
         model = self._model()
         segments, info = model.transcribe(
-            str(media_path),
+            samples,
             language=language or None,
             word_timestamps=True,
             vad_filter=True,

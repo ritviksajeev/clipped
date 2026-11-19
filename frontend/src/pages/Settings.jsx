@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { api } from '../api.js'
+import { api, isDesktop, openExternal } from '../api.js'
 import { useApp } from '../App.jsx'
 import { AutoWarning, Field, NumberInput, Select, TagInput, Toggle } from '../components/ui.jsx'
 import { PageHead } from '../fx/components.jsx'
@@ -30,7 +30,122 @@ function SecretField({ name, info, onSaved, placeholder, storage }) {
   )
 }
 
-function Connections() {
+const AI_TILES = [
+  { id: 'anthropic', name: 'Claude', by: 'Anthropic', blurb: 'Sign in once in your browser. No key to copy.' },
+  { id: 'openrouter', name: 'OpenRouter', by: 'Claude, GPT, Gemini & free models', blurb: 'One click: approve clipped on openrouter.ai.' },
+  { id: 'ollama', name: 'Ollama', by: 'Free · runs on this computer', blurb: 'No account, no key, no cost. Needs Ollama installed.' },
+]
+
+function AIConnect({ secrets, storage, reloadSecrets, onProvider }) {
+  const { notify, route } = useApp()
+  const [st, setSt] = useState(null)
+  const [waiting, setWaiting] = useState('')
+  const load = async () => {
+    const r = await api.get('/api/ai/status')
+    setSt(r)
+    onProvider?.(r.provider)
+    return r
+  }
+  useEffect(() => {
+    load().catch(() => {})
+    if (route.params.get('ai') === 'openrouter') notify('OpenRouter connected ✓')
+    if (route.params.get('ai_error')) notify(`AI connection failed: ${route.params.get('ai_error')}`, 'error')
+  }, [])
+  useEffect(() => {
+    if (!waiting) return
+    const t = setInterval(async () => {
+      const r = await load()
+      if (waiting === 'anthropic' && r.anthropic.login.state !== 'waiting') {
+        setWaiting('')
+        if (r.anthropic.login.state === 'done') notify('Signed in to Anthropic ✓')
+        else notify(r.anthropic.login.message || 'Sign-in did not finish', 'error')
+      }
+      if (waiting === 'openrouter' && r.openrouter.connected) { setWaiting(''); notify('OpenRouter connected ✓') }
+    }, 2000)
+    const stop = setTimeout(() => setWaiting(''), 10 * 60 * 1000)
+    return () => { clearInterval(t); clearTimeout(stop) }
+  }, [waiting])
+
+  const run = (fn) => async () => { try { await fn() } catch (e) { notify(e.message, 'error') } }
+  const use = (provider) => run(async () => {
+    const r = await api.post('/api/ai/use', { provider })
+    onProvider?.(r.provider); await load()
+    notify(provider === 'template' ? 'Using the free templates' : `Titles now written by ${AI_TILES.find((t) => t.id === provider)?.name || provider}`)
+  })
+  const signInAnthropic = run(async () => { await api.post('/api/ai/anthropic/login'); setWaiting('anthropic'); await load() })
+  const connectOpenRouter = run(async () => {
+    const r = await api.post(`/api/ai/openrouter/connect${isDesktop() ? '?desktop=true' : ''}`)
+    if (await openExternal(r.url)) setWaiting('openrouter')
+  })
+
+  if (!st) return <section className="card glow reveal d2"><div className="faint label">Checking AI connections…</div></section>
+  const ready = { anthropic: st.anthropic.ready, openrouter: st.openrouter.connected, ollama: st.ollama.running }
+  const status = {
+    anthropic: st.anthropic.signed_in ? `signed in · ${st.anthropic.profile}` : st.anthropic.api_key ? 'API key saved' : st.anthropic.env ? 'key from environment' : 'not connected',
+    openrouter: st.openrouter.connected ? `connected ${st.openrouter.hint}` : 'not connected',
+    ollama: st.ollama.running ? `${st.ollama.models.length} model${st.ollama.models.length === 1 ? '' : 's'} installed` : 'not running',
+  }
+  const action = (id) => {
+    if (id === 'anthropic') {
+      if (waiting === 'anthropic') return <>
+        <span className="chip wip">Approve in your browser…</span>
+        {st.anthropic.login.url && <a className="ulink" href={st.anthropic.login.url} target="_blank" rel="noopener" onClick={(e) => { if (isDesktop()) { e.preventDefault(); openExternal(st.anthropic.login.url) } }}>Didn't open?</a>}
+      </>
+      if (!st.anthropic.cli) return <a className="btn small" href={st.anthropic.install_url} target="_blank" rel="noopener"
+        onClick={(e) => { if (isDesktop()) { e.preventDefault(); openExternal(st.anthropic.install_url) } }}>Install Anthropic CLI ↗</a>
+      return <button className="btn small" onClick={signInAnthropic}>{st.anthropic.signed_in ? 'Sign in again' : 'Sign in with Anthropic'}</button>
+    }
+    if (id === 'openrouter') {
+      if (waiting === 'openrouter') return <span className="chip wip">Approve on openrouter.ai…</span>
+      if (st.openrouter.connected) return <button className="btn small ghost danger" onClick={run(async () => { await api.post('/api/ai/openrouter/disconnect'); await load(); reloadSecrets() })}>Disconnect</button>
+      return <button className="btn small" onClick={connectOpenRouter}>Connect OpenRouter</button>
+    }
+    if (st.ollama.running) return <button className="btn small ghost" onClick={run(load)}>Refresh</button>
+    return <>
+      <a className="btn small" href="https://ollama.com/download" target="_blank" rel="noopener" onClick={(e) => { if (isDesktop()) { e.preventDefault(); openExternal('https://ollama.com/download') } }}>Get Ollama ↗</a>
+      <button className="btn small ghost" onClick={run(load)}>Check again</button>
+    </>
+  }
+  return (
+    <section className="card glow reveal d2">
+      <div className="card-head"><h2>AI titles · optional</h2><a className="ulink" href="#/guides/ai-titles">Guide</a></div>
+      <p className="field-hint" style={{ marginBottom: 16 }}>
+        Connect an AI to write titles, or keep the free templates. {st.provider === 'template'
+          ? <span className="ok-text">Using free templates.</span>
+          : <>Titles are written by <strong>{AI_TILES.find((t) => t.id === st.provider)?.name || st.provider}</strong>. <button className="linklike" onClick={use('template')}>Switch to free templates</button></>}
+      </p>
+      <div className="ai-grid">
+        {AI_TILES.map((t) => (
+          <div key={t.id} className={`ai-tile ${st.provider === t.id ? 'active' : ''}`}>
+            <div className="ai-top">
+              <span className={`chip ${ready[t.id] ? 'live' : ''}`}>{status[t.id]}</span>
+              {st.provider === t.id && <span className="chip accent">in use</span>}
+            </div>
+            <strong>{t.name}</strong>
+            <span className="label">{t.by}</span>
+            <span className="muted small">{t.blurb}</span>
+            <div className="ai-actions">
+              {action(t.id)}
+              {ready[t.id] && st.provider !== t.id && <button className="btn small primary" onClick={use(t.id)}>Use for titles</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="field-hint" style={{ marginTop: 14 }}>
+        Claude sign-in uses an Anthropic Console account (pay as you go). Claude.ai Pro/Max chat plans and ChatGPT Plus can't be
+        used by other apps, so those need OpenRouter, a key, or the free options.
+      </p>
+      <details>
+        <summary>…or paste an API key instead</summary>
+        <SecretField name="anthropic_api_key" info={secrets.anthropic_api_key} onSaved={() => { reloadSecrets(); load() }} storage={storage} placeholder="sk-ant-…" />
+        <SecretField name="openai_api_key" info={secrets.openai_api_key} onSaved={() => { reloadSecrets(); load() }} storage={storage} placeholder="sk-…" />
+        {st.openai.ready && st.provider !== 'openai' && <button className="btn small primary" onClick={use('openai')}>Use OpenAI for titles</button>}
+      </details>
+    </section>
+  )
+}
+
+function Connections({ onProvider }) {
   const { notify, route, refreshStatus } = useApp()
   const [secrets, setSecrets] = useState(null)
   const [yt, setYt] = useState(null)
@@ -44,11 +159,24 @@ function Connections() {
     if (route.params.get('youtube') === 'connected') notify('YouTube connected')
     if (route.params.get('youtube_error')) notify(`YouTube connection failed: ${route.params.get('youtube_error')}`, 'error')
   }, [])
+  const [ytWaiting, setYtWaiting] = useState(false)
+  useEffect(() => {
+    if (!ytWaiting) return
+    const t = setInterval(async () => {
+      const r = await api.get('/api/youtube/status')
+      if (r.connected && r.channel) { setYt(r); setYtWaiting(false); notify('YouTube connected'); refreshStatus() }
+    }, 2000)
+    const stop = setTimeout(() => setYtWaiting(false), 10 * 60 * 1000)
+    return () => { clearInterval(t); clearTimeout(stop) }
+  }, [ytWaiting])
   if (!secrets) return <div className="faint label">Loading…</div>
   const s = secrets.secrets
   const storage = secrets.os_keyring ? 'Stored in your OS keychain.' : 'Stored in a file only your user account can read.'
   const connect = async () => {
-    try { const r = await api.get('/api/youtube/connect'); window.location.href = r.url } catch (e) { notify(e.message, 'error') }
+    try {
+      const r = await api.get(`/api/youtube/connect${isDesktop() ? '?desktop=true' : ''}`)
+      if (await openExternal(r.url)) setYtWaiting(true)
+    } catch (e) { notify(e.message, 'error') }
   }
   return (
     <>
@@ -84,18 +212,14 @@ function Connections() {
           ) : (
             <button className="btn shine big" disabled={!yt?.client_configured} onClick={connect} data-magnetic="0.15">Connect YouTube <span className="arrow">→</span></button>
           )}
+          {ytWaiting && <span className="chip wip">Finish signing in in your browser…</span>}
         </div>
         {yt?.auth_problem && <div className="banner error small">{yt.auth_problem}</div>}
         <p className="field-hint">Google will warn that the app is unverified. It's your own app: choose <em>Advanced → Go to clipped</em>.
           Uploads may be locked to private until your project passes YouTube's free API audit (<a className="link" href="#/guides/youtube">details</a>).</p>
       </section>
 
-      <section className="card glow reveal d2">
-        <div className="card-head"><h2>AI titles · optional</h2><a className="ulink" href="#/guides/ai-titles">Guide</a></div>
-        <p className="field-hint" style={{ marginBottom: 14 }}>Leave both empty to use the free templates.</p>
-        <SecretField name="anthropic_api_key" info={s.anthropic_api_key} onSaved={load} storage={storage} placeholder="sk-ant-…" />
-        <SecretField name="openai_api_key" info={s.openai_api_key} onSaved={load} storage={storage} placeholder="sk-…" />
-      </section>
+      <AIConnect secrets={s} storage={storage} reloadSecrets={load} onProvider={onProvider} />
       <p className="label">Secret storage · {secrets.backend}</p>
     </>
   )
@@ -165,6 +289,11 @@ export default function Settings() {
     })
   }
   const bind = (path) => (v) => upd(path, v)
+  // The AI cards change the provider server-side; mirror it without touching other unsaved edits.
+  const syncProvider = (p) => {
+    const patch = (d) => (d && d.metadata.provider !== p ? { ...d, metadata: { ...d.metadata, provider: p } } : d)
+    setData(patch); setSaved(patch)
+  }
   const save = async (payload = data) => {
     try {
       const r = await api.put('/api/settings', payload)
@@ -187,7 +316,7 @@ export default function Settings() {
           {SECTIONS.map(([k, l]) => <a key={k} href={`#/settings/${k}`} className={section === k ? 'active' : ''}><span data-scramble="">{l}</span></a>)}
         </nav>
         <div className="settings-body" key={section}>
-          {section === 'connections' && <Connections />}
+          {section === 'connections' && <Connections onProvider={syncProvider} />}
 
           {section === 'mode' && <>
             <Section title="Mode">
@@ -205,7 +334,24 @@ export default function Settings() {
               </div>
               <p className="field-hint" style={{ marginTop: 12 }}>Each category can override this in Categories.</p>
             </Section>
-            <Section title="Upload schedule" d={1}>
+            <Section title="Finding clips" d={1}>
+              <div className="mode-switch">
+                {[['trending', 'Trending now', `Clips from the last ${data.selection.trending_window_hours} hours that are gaining views the fastest right now. Catches moments while they blow up.`, 'fresh'],
+                  ['top24h', 'Top of the last 24h', 'The most-viewed clips created in the last 24 hours. Proven hits, a little later.', 'proven']].map(([v, l, d, tag]) => (
+                  <button key={v} className={`mode-option glow ${data.selection.discovery === v ? 'active' : ''}`} onClick={() => upd('selection.discovery', v)}>
+                    <span className={`chip ${data.selection.discovery === v ? 'accent' : ''}`}>{data.selection.discovery === v ? 'selected' : tag}</span>
+                    <strong>{l}</strong><span className="muted small">{d}</span>
+                  </button>
+                ))}
+              </div>
+              {data.selection.discovery === 'trending' && <div className="grid3" style={{ marginTop: 14 }}>
+                <Field label="Trending window (hours)" hint="How recent a clip must be to count as trending">
+                  <NumberInput value={data.selection.trending_window_hours} min={1} max={24} onChange={bind('selection.trending_window_hours')} />
+                </Field>
+              </div>}
+              <p className="field-hint" style={{ marginTop: 12 }}>Each category can override this too. View counts of queued clips are refreshed on every fetch, so a clip that starts rising moves up the queue.</p>
+            </Section>
+            <Section title="Upload schedule" d={2}>
               <div className="grid3">
                 <Field label="Interval between auto uploads">
                   <Select value={isCustom ? 'custom' : String(sched.upload_interval_minutes)} onChange={(v) => upd('schedule.upload_interval_minutes', v === 'custom' ? 90 : Number(v))}
@@ -307,10 +453,13 @@ export default function Settings() {
 
           {section === 'titles' && <Section title="Titles, descriptions & hashtags">
             <div className="grid3">
-              <Field label="Title generator"><Select value={data.metadata.provider} onChange={bind('metadata.provider')}
-                options={[['template', 'Free templates'], ['anthropic', 'Anthropic (your key)'], ['openai', 'OpenAI (your key)']]} /></Field>
-              {data.metadata.provider === 'anthropic' && <Field label="Anthropic model" hint="claude-haiku-5-5 is the cheapest"><input value={data.metadata.anthropic_model} onChange={(e) => upd('metadata.anthropic_model', e.target.value)} /></Field>}
+              <Field label="Title generator" hint={<>Connect one in <a className="link" href="#/settings/connections">Connections</a>.</>}>
+                <Select value={data.metadata.provider} onChange={bind('metadata.provider')}
+                  options={[['template', 'Free templates'], ['anthropic', 'Claude (Anthropic)'], ['openrouter', 'OpenRouter'], ['ollama', 'Ollama (local)'], ['openai', 'OpenAI (your key)']]} /></Field>
+              {data.metadata.provider === 'anthropic' && <Field label="Claude model" hint="claude-haiku-5-5 is the cheapest"><input value={data.metadata.anthropic_model} onChange={(e) => upd('metadata.anthropic_model', e.target.value)} /></Field>}
               {data.metadata.provider === 'openai' && <Field label="OpenAI model"><input value={data.metadata.openai_model} onChange={(e) => upd('metadata.openai_model', e.target.value)} /></Field>}
+              {data.metadata.provider === 'openrouter' && <Field label="OpenRouter model" hint="openrouter/auto picks for you, or any id from openrouter.ai/models"><input value={data.metadata.openrouter_model} onChange={(e) => upd('metadata.openrouter_model', e.target.value)} /></Field>}
+              {data.metadata.provider === 'ollama' && <Field label="Ollama model" hint="Blank = first installed model (e.g. llama3.2)"><input value={data.metadata.ollama_model} placeholder="llama3.2" onChange={(e) => upd('metadata.ollama_model', e.target.value)} /></Field>}
               <Field label="Variants per clip"><Select value={String(data.metadata.variants)} onChange={(v) => upd('metadata.variants', Number(v))} options={['1', '2', '3']} /></Field>
             </div>
             <Toggle checked={data.metadata.credit_in_title} onChange={bind('metadata.credit_in_title')} label="Put the streamer's name in the title"

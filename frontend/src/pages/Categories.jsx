@@ -4,6 +4,7 @@ import { useApp } from '../App.jsx'
 import { AutoWarning, Empty, Field, NumberInput, Select, TagInput, Toggle } from '../components/ui.jsx'
 import { Kicker, PageHead } from '../fx/components.jsx'
 
+const DISCOVERY = { inherit: 'global discovery', trending: 'trending now', top24h: 'top 24h' }
 const PRESETS = {
   'top-left': { x: 0, y: 0, w: 0.26, h: 0.32 },
   'top-right': { x: 0.74, y: 0, w: 0.26, h: 0.32 },
@@ -84,7 +85,7 @@ function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck, index 
               <span className={`chip ${modeChip}`}>{s.mode === 'inherit' ? 'global mode' : s.mode}</span>
               <span className="chip">max {s.max_clips_per_day}/day</span>
               <span className="chip">{s.min_views}+ views</span>
-              <span className="chip">last {s.max_age_hours}h</span>
+              <span className="chip">{DISCOVERY[s.discovery || 'inherit']}</span>
               <span className="chip">{cat.uploads} uploaded</span>
               <span className="chip">fetched {fmtTime(cat.last_fetch_at)}</span>
             </div>
@@ -109,7 +110,10 @@ function CategoryEditor({ cat, onSaved, onDeleted, autoAcked, requestAck, index 
                 }} options={[['inherit', 'Same as global'], ['manual', 'Manual approval'], ['auto', 'Auto']]} />
               </Field>
               <Field label="Minimum views"><NumberInput value={s.min_views} min={0} onChange={set('min_views')} /></Field>
-              <Field label="Clip age window (hours)"><NumberInput value={s.max_age_hours} min={1} max={720} onChange={set('max_age_hours')} /></Field>
+              <Field label="Find clips" hint="Trending = rising fastest right now. Top 24h = most viewed today.">
+                <Select value={s.discovery || 'inherit'} onChange={set('discovery')}
+                  options={[['inherit', 'Same as global'], ['trending', 'Trending now'], ['top24h', 'Top of the last 24h']]} />
+              </Field>
               <Field label="Language" hint="ISO code like en, es, pt. Blank = any.">
                 <input value={s.language} maxLength={5} onChange={(e) => set('language')(e.target.value.trim())} />
               </Field>

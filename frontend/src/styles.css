@@ -699,6 +699,15 @@ html.reveal-on .hours[data-in] .hour-bar { transform: scaleY(1); transition: tra
 .mode-option strong { font-size: clamp(22px, 2.4vw, 32px); font-weight: 400; letter-spacing: -0.05em; text-transform: uppercase; }
 .mode-option.active { border-color: rgba(180, 165, 255, 0.6); background: linear-gradient(160deg, rgba(138, 120, 240, 0.2), rgba(138, 120, 240, 0.02) 60%), var(--bg-1); }
 .mode-option .chip { align-self: flex-start; }
+.ai-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ai-tile { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 18px; border: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.02); transition: translate 0.6s var(--ease-expo), border-color 0.3s, background 0.3s; }
+.ai-tile:hover { translate: 0 -3px; border-color: rgba(180, 165, 255, 0.3); }
+.ai-tile.active { border-color: rgba(180, 165, 255, 0.6); background: linear-gradient(160deg, rgba(138, 120, 240, 0.2), rgba(138, 120, 240, 0.02) 60%), var(--bg-1); }
+.ai-tile strong { font-size: clamp(22px, 2.2vw, 30px); font-weight: 400; letter-spacing: -0.05em; text-transform: uppercase; line-height: 1; margin-top: 6px; }
+.ai-top { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 10px; }
+.linklike { background: none; border: 0; padding: 0; color: var(--lavender); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font: inherit; }
+@media (max-width: 900px) { .ai-grid { grid-template-columns: 1fr; } }
 .yt-connect { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 18px 0 10px; }
 details summary { cursor: pointer; margin: 12px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--white-faint); }
 details summary:hover { color: var(--white); }

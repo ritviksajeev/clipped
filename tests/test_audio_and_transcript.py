@@ -91,18 +91,62 @@ def test_whisper_transcriber_maps_word_timestamps(monkeypatch):
         def __init__(self, *a, **k):
             self.kwargs = k
 
-        def transcribe(self, path, **kwargs):
+        def transcribe(self, audio_in, **kwargs):
+            # Must receive decoded samples, never a path: a path makes faster-whisper
+            # decode through PyAV, which breaks on PyAV 19 ('metadata_errors').
+            assert isinstance(audio_in, np.ndarray) and audio_in.dtype == np.float32
             assert kwargs["word_timestamps"] is True
             return iter([Seg()]), Info()
 
     import faster_whisper
 
     monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    monkeypatch.setattr(audio, "decode_mono", lambda path, sr=16000: np.zeros(sr * 2, dtype=np.float32))
     WhisperTranscriber._models.clear()
     result = WhisperTranscriber("tiny").transcribe(Path("clip.mp4"))
     assert [w.text for w in result.words] == ["Hello", "chat"]
     assert result.language == "en"
     WhisperTranscriber._models.clear()
+
+
+def test_whisper_transcriber_never_uses_pyav(monkeypatch, sample_clip):
+    """Real media through the real decode path; faster-whisper's own PyAV decoder must not run."""
+    import faster_whisper
+    import faster_whisper.audio as fw_audio
+    import faster_whisper.transcribe as fw_transcribe
+
+    def boom(*a, **k):
+        raise AssertionError("faster-whisper's PyAV decoder was used")
+
+    monkeypatch.setattr(fw_audio, "decode_audio", boom)
+    monkeypatch.setattr(fw_transcribe, "decode_audio", boom)
+    seen = {}
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+        def transcribe(self, audio_in, **kwargs):
+            seen["samples"] = audio_in
+            return iter([]), type("Info", (), {"language": "en"})()
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    WhisperTranscriber._models.clear()
+    WhisperTranscriber("tiny").transcribe(sample_clip)
+    WhisperTranscriber._models.clear()
+    assert seen["samples"].size > 16000  # seconds of 16 kHz mono audio
+
+
+def test_whisper_transcriber_handles_video_without_audio(monkeypatch, silent_video):
+    import faster_whisper
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            raise AssertionError("model should not load for a clip with no audio")
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    WhisperTranscriber._models.clear()
+    assert WhisperTranscriber("tiny").transcribe(silent_video).words == []
 
 
 def test_audio_cache_roundtrip():

@@ -28,6 +28,7 @@ from .models import CategorySettings, ClipInfo, GlobalSettings
 from .optimizer import learning, ranking, similarity, timing
 from .pipeline import metadata, runner
 from .pipeline.transcribe import Transcriber, WhisperTranscriber
+from .services import ai
 from .services.quota import QuotaTracker
 from .services.twitch import TwitchClient, TwitchError
 from .services.youtube import AuthError, QuotaExceeded, UploadRequest, YouTubeClient, YouTubeError
@@ -224,29 +225,72 @@ class Engine:
 
     def _fetch_category(self, twitch: TwitchClient, cat: dict, gs: GlobalSettings, now: datetime) -> int:
         cs = CategorySettings.model_validate(cat["settings"])
+        mode = ranking.discovery_mode(cs, gs.selection)
+        hours = ranking.window_hours(mode, gs.selection)
         try:
-            clips = twitch.get_clips(cat["twitch_id"], now - timedelta(hours=cs.max_age_hours), now,
+            # Helix returns the most-viewed clips created inside the window.
+            clips = twitch.get_clips(cat["twitch_id"], now - timedelta(hours=hours), now,
                                      max_clips=100, game_name=cat["name"])
         except TwitchError as exc:
             log.error("Fetching %s failed: %s", cat["name"], exc)
             self.last_error = str(exc)
             return 0
-        new = skipped = 0
+        new = skipped = refreshed = 0
         for clip in clips:
-            if self.db.has_clip(clip.id):
-                continue  # dedupe: never process the same clip twice
+            existing = self.db.get_clip(clip.id)
+            if existing:
+                # Never process the same clip twice, but keep queued candidates'
+                # view counts current so "trending" reflects what is rising now.
+                refreshed += self._refresh_candidate(existing, clip, cs, gs, mode, now)
+                continue
             ok, reason = ranking.eligible(clip, cs, gs.selection, now)
             dup = self.db.near_duplicate(clip) if ok else None
             if dup:
                 ok, reason = False, f"same moment as clip {dup}"
-            score, detail = ranking.pre_score(clip, gs.selection, now)
+            score, detail = ranking.pre_score(clip, gs.selection, now, mode)
+            detail["seen_at"] = iso(now)
             if self.db.insert_clip(clip, cat["id"], score, detail, "new" if ok else "skipped", reason):
                 new += ok
                 skipped += not ok
         self.db.mark_fetched(cat["id"], now)
-        log.info("%s: %d new clip(s), %d filtered out, %d already seen", cat["name"], new, skipped,
-                 len(clips) - new - skipped)
+        log.info("%s (%s, last %gh): %d new clip(s), %d filtered out, %d updated", cat["name"],
+                 ranking.DISCOVERY_LABELS[mode], hours, new, skipped, refreshed)
         return new
+
+    def _refresh_candidate(self, row: dict, clip: ClipInfo, cs: CategorySettings, gs: GlobalSettings,
+                           mode: str, now: datetime) -> int:
+        status = row["status"]
+        # A clip skipped only for having too few views gets another chance as it grows.
+        retry = status == "skipped" and row["skip_reason"].startswith("only ")
+        if status != "new" and not retry:
+            return 0
+        old: ClipInfo = row["clip"]
+        detail = row["score_detail"] or {}
+        seen_at = parse_dt(detail.get("seen_at") or row["fetched_at"])
+        recent = ranking.recent_velocity(old.view_count, seen_at, clip.view_count, now)
+        if recent is None:
+            recent = detail.get("recent_velocity")
+            seen_at_out = detail.get("seen_at") or row["fetched_at"]
+        else:
+            seen_at_out = iso(now)
+        clip.game_name = clip.game_name or old.game_name
+        clip.broadcaster_login = clip.broadcaster_login or old.broadcaster_login
+        score, new_detail = ranking.pre_score(clip, gs.selection, now, mode, recent)
+        new_detail["seen_at"] = seen_at_out
+        fields: dict = {"data": clip, "view_count": clip.view_count, "score": score, "score_detail": new_detail}
+        if retry:
+            ok, reason = ranking.eligible(clip, cs, gs.selection, now)
+            if ok and self.db.near_duplicate(clip):
+                ok = False
+            if not ok:
+                if reason == row["skip_reason"]:
+                    fields = {"data": clip, "view_count": clip.view_count, "score_detail": new_detail}
+                else:
+                    fields.update(skip_reason=reason)
+            else:
+                fields.update(status="new", skip_reason="")
+        self.db.update_clip(clip.id, **fields)
+        return 1
 
     # ------------------------------------------------------------------ uploads
     def upload_candidates(self) -> tuple[list[dict], list[dict]]:
@@ -448,9 +492,15 @@ class Engine:
                 continue
             cs = CategorySettings.model_validate(cat["settings"])
             clip: ClipInfo = row["clip"]
-            if clip.age_hours(now) > cs.max_age_hours * 1.5:
-                self.db.update_clip(clip.id, status="skipped", skip_reason="became too old before processing")
+            disc = ranking.discovery_mode(cs, gs.selection)
+            if clip.age_hours(now) > ranking.expiry_hours(disc, gs.selection):
+                self.db.update_clip(clip.id, status="skipped",
+                                    skip_reason=f"no longer {ranking.DISCOVERY_LABELS[disc]}")
                 continue
+            # Re-score live: a trending clip's views/hour falls as it ages, so a
+            # score computed at fetch time goes stale.
+            row["score"], _ = ranking.pre_score(clip, gs.selection, now, disc,
+                                                (row["score_detail"] or {}).get("recent_velocity"))
             mode = self.effective_mode(cat, gs)
             if mode == "manual" and pending_review >= MAX_PENDING_REVIEWS:
                 continue
@@ -478,8 +528,7 @@ class Engine:
             styles=styles, commentary=gs.commentary_default,
             intro=Path(intro) if intro and Path(intro).exists() else None,
             outro=Path(outro) if outro and Path(outro).exists() else None,
-            api_keys={"anthropic_api_key": self.store.get("anthropic_api_key"),
-                      "openai_api_key": self.store.get("openai_api_key")},
+            api_keys=ai.credentials(self.store),
         )
 
     def process_clip_row(self, row: dict, cat: dict | None, gs: GlobalSettings, force_manual: bool = False) -> dict | None:

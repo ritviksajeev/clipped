@@ -51,7 +51,8 @@ jobs:
           CLIPPED_HOME: ${{ runner.temp }}/clipped-smoke
           CLIPPED_SECRETS_FILE: ${{ runner.temp }}/clipped-smoke/secrets.json
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then dist/clipped/clipped.exe doctor; else dist/clipped/clipped doctor; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then dist/clipped/clipped-cli.exe doctor; else dist/clipped/clipped-cli doctor; fi
+          test -f "dist/clipped/clipped$([ "$RUNNER_OS" = "Windows" ] && echo .exe)"
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

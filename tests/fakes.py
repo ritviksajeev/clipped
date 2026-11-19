@@ -30,9 +30,11 @@ class FakeTwitchService:
     def __init__(self, clips: list[ClipInfo]):
         self.clips = clips
         self.calls = 0
+        self.windows: list[tuple] = []
 
     def get_clips(self, game_id, started_at, ended_at=None, max_clips=100, game_name=""):
         self.calls += 1
+        self.windows.append((started_at, ended_at))
         return [c.model_copy(update={"game_name": game_name}) for c in self.clips]
 
     def get_users(self, ids):

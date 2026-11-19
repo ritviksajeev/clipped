@@ -1,6 +1,8 @@
 # Troubleshooting
 
-**The dashboard won't open.** Visit <http://localhost:8000> yourself. If another program uses port 8000, start clipped with `clipped serve --port 8010`. With a Web-application Google client, add the new redirect URI too.
+**The clipped window doesn't open.** clipped uses a Microsoft Edge (or Chrome) app window. If neither is installed it opens a normal browser tab instead; you can also force that with `clipped app --window browser`, or run `clipped serve` and visit <http://localhost:8000> yourself. If another program uses port 8000, the app picks the next free port automatically; for `clipped serve` use `--port 8010`. With a Web-application Google client, add the new redirect URI too.
+
+**Transcription fails with "unexpected keyword argument 'metadata_errors'".** Fixed in this version: update clipped (`git pull`, then `pip install -e .`). clipped now decodes audio with ffmpeg itself instead of going through PyAV.
 
 **"YouTube access expired or was revoked."** Your Google app is still in *Testing* mode, which expires sign-ins after 7 days. Publish the app (see the YouTube guide, step 3), then click **Connect YouTube** again.
 

@@ -33,6 +33,7 @@ SECRET_NAMES = {
     "youtube_refresh_token": "YouTube refresh token (set by Connect YouTube)",
     "anthropic_api_key": "Anthropic API key",
     "openai_api_key": "OpenAI API key",
+    "openrouter_api_key": "OpenRouter key (set by Connect OpenRouter)",
 }
 
 

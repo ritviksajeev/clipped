@@ -1,7 +1,8 @@
 """Titles, descriptions, hashtags and hook text.
 
-Free template generator by default; optionally the user's own Anthropic or
-OpenAI key. Whatever generates the text, :func:`finalize` always enforces
+Free template generator by default. Optionally an AI model: Anthropic (an API
+key, or the user's Anthropic sign-in profile), OpenAI, OpenRouter (connected
+with one click) or a local Ollama model. Whatever generates the text, :func:`finalize` always enforces
 streamer credit, a link to the original clip, #Shorts and YouTube's limits.
 """
 
@@ -16,6 +17,7 @@ import httpx
 
 from ..logs import get_logger
 from ..models import ClipInfo, MetadataSettings, normalize_hashtags
+from ..services.ai import json_from_text
 
 log = get_logger("metadata")
 
@@ -215,11 +217,19 @@ def _parse_variants(payload: dict, styles: list[str], source: str) -> list[Varia
     return [by_style[s] for s in styles if s in by_style]
 
 
-def anthropic_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
+def anthropic_variants(api_key: str | None, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
                        hashtags: list[str]) -> list[Variant]:
     import anthropic
 
-    client = anthropic.Anthropic(api_key=api_key, max_retries=2, timeout=90.0)
+    try:
+        if api_key:
+            client = anthropic.Anthropic(api_key=api_key, max_retries=2, timeout=90.0)
+        else:
+            # No key saved: the SDK finds the user's `ant auth login` profile by
+            # itself and refreshes its short-lived token as needed.
+            client = anthropic.Anthropic(max_retries=2, timeout=90.0)
+    except anthropic.AnthropicError as exc:
+        raise LLMError("no Anthropic key or sign-in found") from exc
     output_config: dict = {"format": {"type": "json_schema", "schema": _llm_schema(styles)}}
     if model.startswith(EFFORT_PREFIXES):
         output_config["effort"] = "low"
@@ -237,7 +247,7 @@ def anthropic_variants(api_key: str, model: str, clip: ClipInfo, transcript_text
     try:
         response = client.beta.messages.create(**kwargs)
     except anthropic.AuthenticationError as exc:
-        raise LLMError("Anthropic rejected the API key") from exc
+        raise LLMError("Anthropic rejected the key or sign-in (sign in again in Settings)") from exc
     except anthropic.RateLimitError as exc:
         raise LLMError("Anthropic rate limit reached") from exc
     except anthropic.APIStatusError as exc:
@@ -254,8 +264,10 @@ def anthropic_variants(api_key: str, model: str, clip: ClipInfo, transcript_text
     return _parse_variants(payload, styles, "anthropic")
 
 
-def openai_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
-                    hashtags: list[str], transport: httpx.BaseTransport | None = None) -> list[Variant]:
+def chat_variants(url: str, api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
+                  hashtags: list[str], *, source: str, label: str, extra_headers: dict | None = None,
+                  transport: httpx.BaseTransport | None = None) -> list[Variant]:
+    """Any OpenAI-compatible chat completions endpoint (OpenAI, OpenRouter)."""
     body = {
         "model": model,
         "messages": [
@@ -264,22 +276,70 @@ def openai_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: s
         ],
         "response_format": {"type": "json_object"},
     }
+    headers = {"Authorization": f"Bearer {api_key}", **(extra_headers or {})}
     try:
         with httpx.Client(timeout=90.0, transport=transport) as http:
-            resp = http.post("https://api.openai.com/v1/chat/completions", json=body,
-                             headers={"Authorization": f"Bearer {api_key}"})
+            resp = http.post(url, json=body, headers=headers)
     except httpx.HTTPError as exc:
-        raise LLMError("could not reach the OpenAI API") from exc
-    if resp.status_code == 401:
-        raise LLMError("OpenAI rejected the API key")
+        raise LLMError(f"could not reach {label}") from exc
+    if resp.status_code in (401, 403):
+        raise LLMError(f"{label} rejected the key")
+    if resp.status_code == 402:
+        raise LLMError(f"{label} account is out of credits")
     if resp.status_code >= 400:
-        raise LLMError(f"OpenAI API error {resp.status_code}")
+        raise LLMError(f"{label} API error {resp.status_code}")
     try:
         content = resp.json()["choices"][0]["message"]["content"]
-        payload = json.loads(content)
+        payload = json_from_text(content)
     except (KeyError, IndexError, ValueError, TypeError) as exc:
-        raise LLMError("OpenAI returned an unexpected response") from exc
-    return _parse_variants(payload, styles, "openai")
+        raise LLMError(f"{label} returned an unexpected response") from exc
+    return _parse_variants(payload, styles, source)
+
+
+def openai_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
+                    hashtags: list[str], transport: httpx.BaseTransport | None = None) -> list[Variant]:
+    return chat_variants("https://api.openai.com/v1/chat/completions", api_key, model, clip, transcript_text,
+                         styles, hashtags, source="openai", label="OpenAI", transport=transport)
+
+
+def openrouter_variants(api_key: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
+                        hashtags: list[str], transport: httpx.BaseTransport | None = None) -> list[Variant]:
+    return chat_variants("https://openrouter.ai/api/v1/chat/completions", api_key, model or "openrouter/auto",
+                         clip, transcript_text, styles, hashtags, source="openrouter", label="OpenRouter",
+                         extra_headers={"X-Title": "clipped"}, transport=transport)
+
+
+def ollama_variants(base_url: str, model: str, clip: ClipInfo, transcript_text: str, styles: list[str],
+                    hashtags: list[str], transport: httpx.BaseTransport | None = None) -> list[Variant]:
+    from ..services.ai import AIConnectError, ollama_models
+
+    try:
+        model = model or next(iter(ollama_models(base_url, transport)), "")
+    except AIConnectError as exc:
+        raise LLMError(str(exc)) from exc
+    if not model:
+        raise LLMError("Ollama has no models installed (run: ollama pull llama3.2)")
+    body = {
+        "model": model,
+        "stream": False,
+        "format": _llm_schema(styles),  # structured output: the reply must match this schema
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _user_prompt(clip, transcript_text, styles, hashtags)},
+        ],
+    }
+    try:
+        with httpx.Client(timeout=240.0, transport=transport) as http:  # local models can be slow on CPU
+            resp = http.post(f"{base_url.rstrip('/')}/api/chat", json=body)
+    except httpx.HTTPError as exc:
+        raise LLMError("could not reach Ollama on this computer") from exc
+    if resp.status_code >= 400:
+        raise LLMError(f"Ollama error {resp.status_code}")
+    try:
+        payload = json_from_text(resp.json()["message"]["content"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise LLMError("Ollama returned an unexpected response") from exc
+    return _parse_variants(payload, styles, "ollama")
 
 
 # --------------------------------------------------------------------------- finalize
@@ -374,17 +434,24 @@ def generate_variants(clip: ClipInfo, transcript_text: str, settings: MetadataSe
     styles = [s for s in styles if s in STYLES][: settings.variants] or STYLES[: settings.variants]
     hashtags = normalize_hashtags(category_hashtags + [game_hashtag(clip.game_name)])
     variants: list[Variant] | None = None
+    provider = settings.provider
     try:
-        if settings.provider == "anthropic" and api_keys.get("anthropic_api_key"):
-            variants = anthropic_variants(api_keys["anthropic_api_key"], settings.anthropic_model, clip,
+        if provider == "anthropic" and (api_keys.get("anthropic_api_key") or api_keys.get("anthropic_signed_in")):
+            variants = anthropic_variants(api_keys.get("anthropic_api_key"), settings.anthropic_model, clip,
                                           transcript_text, styles, hashtags)
-        elif settings.provider == "openai" and api_keys.get("openai_api_key"):
+        elif provider == "openai" and api_keys.get("openai_api_key"):
             variants = openai_variants(api_keys["openai_api_key"], settings.openai_model, clip,
                                        transcript_text, styles, hashtags)
-        elif settings.provider != "template":
-            log.warning("%s selected but no API key saved; using free templates", settings.provider)
+        elif provider == "openrouter" and api_keys.get("openrouter_api_key"):
+            variants = openrouter_variants(api_keys["openrouter_api_key"], settings.openrouter_model, clip,
+                                           transcript_text, styles, hashtags)
+        elif provider == "ollama":
+            variants = ollama_variants(settings.ollama_url, settings.ollama_model, clip, transcript_text,
+                                       styles, hashtags)
+        elif provider != "template":
+            log.warning("%s selected but not connected; using free templates", provider)
     except LLMError as exc:
-        log.warning("Title generation via %s failed (%s); using free templates", settings.provider, exc)
+        log.warning("Title generation via %s failed (%s); using free templates", provider, exc)
         variants = None
     templates = template_variants(clip, transcript_text, styles, hashtags, keywords)
     if variants:

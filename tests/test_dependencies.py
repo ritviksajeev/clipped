@@ -19,6 +19,7 @@ IMPORT_TO_DIST = {
     "faster_whisper": "faster-whisper",
     "PIL": "pillow",
     "multipart": "python-multipart",
+    "webview": "pywebview",
 }
 # provided by a declared package's own dependencies
 TRANSITIVE = {"starlette": "fastapi", "anyio": "fastapi"}

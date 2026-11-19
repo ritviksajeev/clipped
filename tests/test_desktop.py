@@ -1,0 +1,205 @@
+"""Desktop app: window lifecycle, heartbeat, app-mode browser discovery, CLI default."""
+
+import json
+import socket
+import sys
+import urllib.request
+
+import pytest
+from fastapi.testclient import TestClient
+
+from clipped import desktop
+from clipped.api.app import create_app
+
+
+class FakeClock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_session_closes_after_goodbye_but_survives_a_reload():
+    clock = FakeClock()
+    s = desktop.AppSession("tok", clock=clock)
+    assert not s.ping("wrong")
+    assert s.ping("tok") and not s.should_close()
+    s.ping("tok", bye=True)  # reload: goodbye...
+    clock.t += 2
+    s.ping("tok")  # ...and straight back
+    clock.t += 20
+    assert not s.should_close()
+    s.ping("tok", bye=True)  # window closed for real
+    clock.t += desktop.BYE_GRACE + 1
+    assert s.should_close()
+
+
+def test_session_times_out_without_heartbeats_unless_away():
+    clock = FakeClock()
+    s = desktop.AppSession("tok", clock=clock)
+    clock.t += 10_000
+    assert not s.should_close()  # never seen yet: the window may still be opening
+    s.ping("tok")
+    clock.t += desktop.IDLE_TIMEOUT + 1
+    assert s.should_close()
+    s.ping("tok", away=True)  # signing in in the same window
+    clock.t += desktop.IDLE_TIMEOUT * 3
+    assert not s.should_close()
+    clock.t += desktop.AWAY_TIMEOUT
+    assert s.should_close()
+
+
+def test_ping_endpoint_needs_the_launch_token(tmp_path, monkeypatch, sample_clip):
+    from tests.fakes import build_engine
+
+    engine, db, store, *_ = build_engine(tmp_path, sample_clip)
+    session = desktop.AppSession("launch-token")
+    app = create_app(db=db, store=store, engine=engine, allowed_hosts={"testserver"}, autostart=False,
+                     app_session=session)
+    with TestClient(app) as client:
+        assert client.post("/app/ping?token=nope").status_code == 404
+        assert client.post("/app/ping?token=launch-token").json() == {"ok": True}  # no X-Clipped needed (beacon)
+        assert session.seen
+        client.post("/app/ping?token=launch-token&bye=true")
+        assert session.bye_at is not None
+    plain = create_app(db=db, store=store, engine=engine, allowed_hosts={"testserver"}, autostart=False)
+    with TestClient(plain) as client:  # `clipped serve`: no app window, endpoint is inert
+        assert client.post("/app/ping?token=launch-token").status_code == 404
+
+
+def test_app_window_command_is_a_chromeless_window(tmp_path):
+    cmd = desktop.app_window_command("msedge.exe", "http://127.0.0.1:8000/?app=t#/", tmp_path)
+    assert cmd[0] == "msedge.exe"
+    assert "--app=http://127.0.0.1:8000/?app=t#/" in cmd
+    assert f"--user-data-dir={tmp_path}" in cmd and "--no-first-run" in cmd
+
+
+def test_find_app_browser_prefers_edge_on_windows(tmp_path, monkeypatch):
+    edge = tmp_path / "x86" / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+    edge.parent.mkdir(parents=True)
+    edge.write_text("")
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("CLIPPED_BROWSER", raising=False)
+    monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "x86"))
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "pf"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    assert desktop.find_app_browser() == str(edge)
+    monkeypatch.setenv("CLIPPED_BROWSER", str(tmp_path / "missing.exe"))
+    assert desktop.find_app_browser() is None
+
+
+def test_choose_window_falls_back(monkeypatch):
+    monkeypatch.setattr(desktop, "native_available", lambda: False)
+    monkeypatch.setattr(desktop, "find_app_browser", lambda: None)
+    assert desktop.choose_window() == "browser"
+    monkeypatch.setattr(desktop, "find_app_browser", lambda: "/usr/bin/chromium")
+    assert desktop.choose_window() == "app"
+    assert desktop.choose_window("browser") == "browser"
+
+
+class FakeProc:
+    def __init__(self, exit_after=None, clock=None):
+        self.exit_after, self.clock = exit_after, clock
+
+    def poll(self):
+        if self.exit_after is not None and self.clock() >= self.exit_after:
+            return 0
+        return None
+
+
+class FakeServer:
+    alive = True
+
+
+def test_wait_for_close_when_the_browser_process_ends():
+    clock = FakeClock()
+    s = desktop.AppSession("tok", clock=clock)
+    proc = FakeProc(exit_after=clock.t + 30, clock=clock)
+
+    def sleep(_):
+        clock.t += 1
+
+    assert desktop.wait_for_close(s, FakeServer(), proc, sleep=sleep) == "window closed"
+    assert clock.t >= 1030
+
+
+def test_wait_for_close_does_not_wait_for_heartbeat_timeout_when_window_process_ends():
+    clock = FakeClock()
+    s = desktop.AppSession("tok", clock=clock)
+    proc = FakeProc(exit_after=clock.t + 30, clock=clock)
+
+    def sleep(_):
+        clock.t += 1
+        if clock.t < 1030:
+            s.ping("tok")  # the page was checking in until the window closed
+
+    assert desktop.wait_for_close(s, FakeServer(), proc, sleep=sleep) == "window closed"
+    assert clock.t <= 1032
+
+
+def test_wait_for_close_handoff_relies_on_heartbeat():
+    """Browser exits at once (handed off to a running instance): keep going while pings arrive."""
+    clock = FakeClock()
+    s = desktop.AppSession("tok", clock=clock)
+    proc = FakeProc(exit_after=clock.t + 0.5, clock=clock)
+    ticks = {"n": 0}
+
+    def sleep(_):
+        clock.t += 1
+        ticks["n"] += 1
+        if ticks["n"] < 60:
+            s.ping("tok")
+        elif ticks["n"] == 60:
+            s.ping("tok", bye=True)
+
+    assert desktop.wait_for_close(s, FakeServer(), proc, sleep=sleep) == "window closed"
+    assert ticks["n"] >= 60 + desktop.BYE_GRACE
+
+
+def test_server_thread_starts_and_stops(tmp_path, sample_clip):
+    from tests.fakes import build_engine
+
+    engine, db, store, *_ = build_engine(tmp_path, sample_clip)
+    app = create_app(db=db, store=store, engine=engine, autostart=False)
+    port = desktop.find_port("127.0.0.1", 18765)
+    server = desktop.ServerThread(app, "127.0.0.1", port)
+    server.start()
+    try:
+        assert desktop.existing_instance(port)
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5) as resp:
+            assert json.loads(resp.read())["state"] == "stopped"
+        # The port is taken now, so the next free one is chosen
+        assert desktop.find_port("127.0.0.1", port) != port
+    finally:
+        server.stop()
+    assert not server.alive
+    assert not desktop.existing_instance(port)
+
+
+def test_existing_instance_ignores_other_programs():
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    try:
+        assert not desktop.existing_instance(sock.getsockname()[1])
+    finally:
+        sock.close()
+
+
+def test_no_command_opens_the_app(monkeypatch):
+    from clipped import cli
+
+    called = {}
+    monkeypatch.setattr(desktop, "run_app", lambda port, window: called.update(port=port, window=window) or 0)
+    assert cli.main([]) == 0
+    assert called == {"port": 8000, "window": "auto"}
+
+
+def test_linux_shortcut_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    made = desktop.create_shortcuts()
+    text = made[0].read_text()
+    assert made[0].name == "clipped.desktop"
+    assert "-m clipped app" in text and "Terminal=false" in text and "icon.png" in text

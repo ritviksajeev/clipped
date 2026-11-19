@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="theme-color" content="#09090b"/>
-<title>Optional: AI titles with your own Anthropic or OpenAI key · clipped</title>
-<meta name="description" content="clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, add your own API key. You pay "/>
+<title>Optional: AI titles (Claude, OpenRouter, Ollama or your own key) · clipped</title>
+<meta name="description" content="clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you&#x27;d like more natural titles, connect an AI under Settings →"/>
 <script>(function(d){var h=d.documentElement;h.classList.add('js');window.clippedFailsafe=setTimeout(function(){h.classList.add('is-ready')},7000)})(document);</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -30,33 +30,46 @@
   <section class="guide-hero">
     <div class="wrap">
       <div class="ph-top"><span><span class="dot"></span><a href="../index.html" data-transition>clipped</a> / <a href="index.html" data-transition>guides</a> / ai-titles</span><span>guide 04 of 07</span></div>
-      <h1 class="ph-title" data-split>Optional: AI titles with your own Anthropic or OpenAI key</h1>
+      <h1 class="ph-title" data-split>Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</h1>
     </div>
   </section>
   <div class="wrap guide-layout">
     <aside class="guide-nav reveal">
       <h3>SETUP GUIDES</h3>
-      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition class="active">Optional: AI titles with your own Anthropic or OpenAI key</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
+      <nav><a href="quick-start.html" data-transition>Quick start</a><a href="twitch.html" data-transition>Get your Twitch Client ID and Secret</a><a href="youtube.html" data-transition>Connect YouTube (Google Cloud setup)</a><a href="ai-titles.html" data-transition class="active">Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</a><a href="ffmpeg.html" data-transition>Install ffmpeg (only if it&#x27;s missing)</a><a href="safety.html" data-transition>Auto mode &amp; staying safe</a><a href="troubleshooting.html" data-transition>Troubleshooting</a></nav>
     </aside>
     <article class="prose glow reveal d1">
-      <h1>Optional: AI titles with your own Anthropic or OpenAI key</h1>
-<p>clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, add your own API key. You pay the provider directly for what you use, usually a fraction of a cent per clip.</p>
+      <h1>Optional: AI titles (Claude, OpenRouter, Ollama or your own key)</h1>
+<p>clipped writes titles, hook text, descriptions and hashtags for free using built-in templates. If you'd like more natural titles, connect an AI under <strong>Settings → Connections → AI titles</strong>. Most options are a single button, with no key to copy.</p>
 <p>Whichever generator you use, clipped always adds the streamer credit, the channel link, the original clip link and <code>#Shorts</code> itself. A model can't drop them.</p>
-<h2>Anthropic (Claude)</h2>
+<h2>Claude: sign in with Anthropic</h2>
 <ol>
-<li>Create an account at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">https://console.anthropic.com/</a> and add credit under <strong>Billing</strong>.</li>
-<li>Open <strong>API Keys</strong> → <strong>Create Key</strong>, name it <code>clipped</code>, and copy the key (it starts with <code>sk-ant-</code>).</li>
-<li>In clipped: <strong>Settings → Titles &amp; AI</strong>, paste it under <strong>Anthropic API key</strong>, set <strong>Title generator</strong> to <strong>Anthropic</strong>, and save.</li>
-<li>The default model is <code>claude-opus-5-5</code>. For the cheapest option, set the model to <code>claude-haiku-5-5</code>.</li>
+<li>Install the free Anthropic CLI (<code>ant</code>) once. Get it from <a href="https://github.com/anthropics/anthropic-cli/releases" target="_blank" rel="noopener">https://github.com/anthropics/anthropic-cli/releases</a> (macOS: <code>brew install anthropics/tap/ant</code>).</li>
+<li>In clipped, click <strong>Sign in with Anthropic</strong>. Your browser opens; sign in to your Anthropic Console account and approve.</li>
+<li>That's it. clipped switches titles to Claude automatically if you were on the free templates.</li>
 </ol>
-<h2>OpenAI</h2>
+<p>The sign-in is saved by the Anthropic CLI on your computer, and the official Anthropic library refreshes it by itself. clipped never sees or stores a key. You pay Anthropic per use (usually a fraction of a cent per clip), so add credit under <strong>Billing</strong> at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">https://console.anthropic.com/</a>. The default model is <code>claude-opus-5-5</code>; for the cheapest option set it to <code>claude-haiku-5-5</code> in <strong>Settings → Titles &amp; AI</strong>.</p>
+<blockquote>
+<p><strong>Claude.ai Pro/Max chat plans can't be used here.</strong> Anthropic doesn't let other apps use a chat subscription. The same goes for ChatGPT Plus. Use the Console sign-in above, OpenRouter, or a free option.</p>
+</blockquote>
+<h2>OpenRouter: one account, many models</h2>
+<p><a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> gives one account access to Claude, GPT, Gemini, Llama and several free models.</p>
 <ol>
-<li>Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">https://platform.openai.com/api-keys</a>.</li>
-<li>In clipped paste it under <strong>OpenAI API key</strong>, set <strong>Title generator</strong> to <strong>OpenAI</strong>, and enter a model name your account can use.</li>
+<li>Click <strong>Connect OpenRouter</strong>. Your browser opens openrouter.ai; sign in and approve clipped.</li>
+<li>OpenRouter sends clipped a key made just for it, which is saved in your OS keychain. You can revoke it any time on openrouter.ai.</li>
+<li>The model defaults to <code>openrouter/auto</code> (OpenRouter picks). To choose one yourself, paste any model id from <a href="https://openrouter.ai/models" target="_blank" rel="noopener">https://openrouter.ai/models</a> in <strong>Settings → Titles &amp; AI</strong>. Ids ending in <code>:free</code> cost nothing.</li>
 </ol>
+<h2>Ollama: free, on your own computer</h2>
+<ol>
+<li>Install Ollama from <a href="https://ollama.com/download" target="_blank" rel="noopener">https://ollama.com/download</a> and pull a model, e.g. <code>ollama pull llama3.2</code>.</li>
+<li>Keep Ollama running. clipped detects it automatically; click <strong>Use for titles</strong>.</li>
+</ol>
+<p>No account, no key and no cost. Titles take a little longer on computers without a strong GPU.</p>
+<h2>Or paste an API key</h2>
+<p>Under <strong>…or paste an API key instead</strong> you can still paste an Anthropic key (<code>sk-ant-…</code>, from <a href="https://console.anthropic.com/" target="_blank" rel="noopener">https://console.anthropic.com/</a>) or an OpenAI key (from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">https://platform.openai.com/api-keys</a>).</p>
 <h2>How variants work</h2>
 <p>For every clip clipped writes 2-3 title <em>styles</em> (hype, question, descriptive, streamer-first). In the review queue you can pick one or edit it. In Auto mode the optimizer tracks which style earns the most views and retention on <strong>your</strong> channel and favours it, while still trying the others occasionally.</p>
-<p>If the provider is unreachable or the key is wrong, clipped falls back to the free templates and notes it in the log.</p>
+<p>If the AI is unreachable, out of credit or signed out, clipped falls back to the free templates and notes it in the log.</p>
     </article>
   </div>
 </main>

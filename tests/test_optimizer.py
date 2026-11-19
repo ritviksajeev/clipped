@@ -23,6 +23,38 @@ def clip(**kw):
     return ClipInfo(**base)
 
 
+def test_trending_and_top24h_rank_differently():
+    rising = clip(view_count=900, created_at=NOW - timedelta(minutes=45))   # small but exploding
+    big = clip(view_count=20000, created_at=NOW - timedelta(hours=20))     # huge, but from this morning
+    trending = lambda c: ranking.pre_score(c, SEL, NOW, "trending")[0]
+    top = lambda c: ranking.pre_score(c, SEL, NOW, "top24h")[0]
+    assert trending(rising) > trending(big)
+    assert top(big) > top(rising)
+
+
+def test_recent_velocity_rewards_clips_gaining_views_now():
+    c = clip(view_count=3000, created_at=NOW - timedelta(hours=5))
+    assert ranking.recent_velocity(2000, NOW - timedelta(minutes=30), 3000, NOW) == pytest.approx(2000)
+    assert ranking.recent_velocity(2990, NOW - timedelta(minutes=5), 3000, NOW) is None  # too soon to tell
+    assert ranking.recent_velocity(3100, NOW - timedelta(hours=1), 3000, NOW) == 0  # never negative
+    peaked = ranking.pre_score(c, SEL, NOW, "trending", recent=0.0)[0]
+    climbing = ranking.pre_score(c, SEL, NOW, "trending", recent=2000.0)[0]
+    assert climbing > ranking.pre_score(c, SEL, NOW, "trending")[0] > peaked
+
+
+def test_discovery_windows_and_category_override():
+    sel = SelectionSettings(trending_window_hours=6)
+    assert ranking.window_hours("trending", sel) == 6 and ranking.window_hours("top24h", sel) == 24
+    assert ranking.discovery_mode(CategorySettings(), sel) == "trending"
+    assert ranking.discovery_mode(CategorySettings(discovery="top24h"), sel) == "top24h"
+    ten_hours = clip(created_at=NOW - timedelta(hours=10))
+    ok, why = ranking.eligible(ten_hours, CategorySettings(), sel, NOW)
+    assert not ok and "6h" in why and "trending" in why
+    assert ranking.eligible(ten_hours, CategorySettings(discovery="top24h"), sel, NOW)[0]
+    assert not ranking.eligible(clip(created_at=NOW - timedelta(hours=25)), CategorySettings(discovery="top24h"),
+                                sel, NOW)[0]
+
+
 def test_view_velocity_favours_fresh_clips():
     fresh = clip(view_count=1000, created_at=NOW - timedelta(hours=1))
     stale = clip(view_count=5000, created_at=NOW - timedelta(hours=40))

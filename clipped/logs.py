@@ -134,7 +134,7 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
     redactor = RedactingFilter()
 
     handlers: list[logging.Handler] = [live_buffer]
-    if console:
+    if console and sys.stderr is not None:  # None when started without a console (pythonw, windowed app)
         stream = sys.stderr
         try:  # never crash on characters a legacy Windows console can't encode
             stream.reconfigure(errors="backslashreplace")
@@ -151,7 +151,11 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
         handler.addFilter(redactor)
         handler.setFormatter(fmt)
         root.addHandler(handler)
-    for noisy in ("httpx", "httpcore", "urllib3", "faster_whisper"):
+    # Third-party libraries log every HTTP request at INFO (the whisper model
+    # download alone is dozens of "HTTP Request: GET https://huggingface.co/..."
+    # lines); keep only their warnings and errors.
+    for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "faster_whisper",
+                  "huggingface_hub", "hf_xet", "filelock", "anthropic", "pywebview"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

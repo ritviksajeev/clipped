@@ -72,3 +72,53 @@ export function fmtNum(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
   return String(n)
 }
+
+// Launched as a desktop app (`clipped` / `clipped app`): the launcher passes a
+// per-launch token so the window can tell the server it is still open.
+function readAppToken() {
+  let token = new URLSearchParams(window.location.search).get('app')
+  try {
+    if (token) sessionStorage.setItem('clipped-app', token)
+    else token = sessionStorage.getItem('clipped-app') // back from a sign-in page without the query
+  } catch { /* storage blocked: the query param is enough */ }
+  return token
+}
+const APP_TOKEN = readAppToken()
+let leavingForSignIn = false
+
+export const isDesktop = () => Boolean(window.pywebview || APP_TOKEN)
+
+function appPing(flag = '') {
+  if (!APP_TOKEN) return
+  const url = `/app/ping?token=${encodeURIComponent(APP_TOKEN)}${flag}`
+  if (navigator.sendBeacon && navigator.sendBeacon(url)) return
+  fetch(url, { method: 'POST', keepalive: true }).catch(() => {})
+}
+
+export function startAppHeartbeat() {
+  if (!APP_TOKEN) return
+  appPing()
+  setInterval(() => appPing(), 15000)
+  // Closing the window (or reloading) says goodbye; the server waits a few
+  // seconds for a reload to check back in before it quits.
+  window.addEventListener('pagehide', () => { if (!leavingForSignIn) appPing('&bye=1') })
+}
+
+// Sign-in pages (Google, OpenRouter) open outside the dashboard: in the system
+// browser from a native window (Google refuses embedded windows), or in a popup
+// from an app window. In a normal browser tab we just navigate there.
+export async function openExternal(url) {
+  if (window.pywebview?.api?.open_url) {
+    await window.pywebview.api.open_url(url)
+    return true
+  }
+  if (APP_TOKEN) {
+    const w = window.open(url, 'clipped-signin', 'popup,width=560,height=760')
+    if (w) return true
+    // Popup blocked: sign in in this window. Tell the server we are only away.
+    appPing('&away=1')
+    leavingForSignIn = true
+  }
+  window.location.href = url
+  return Boolean(APP_TOKEN)
+}

@@ -80,13 +80,24 @@ class HookSettings(BaseModel):
 
 
 class MetadataSettings(BaseModel):
-    provider: Literal["template", "anthropic", "openai"] = "template"
+    provider: Literal["template", "anthropic", "openai", "openrouter", "ollama"] = "template"
     anthropic_model: str = "claude-opus-5-5"
     openai_model: str = "gpt-5-mini"
+    openrouter_model: str = "openrouter/auto"  # lets OpenRouter pick; any id from openrouter.ai/models works
+    ollama_model: str = ""  # empty = first installed model
+    ollama_url: str = "http://127.0.0.1:11434"
     variants: int = Field(3, ge=1, le=3)
     credit_in_title: bool = True
     default_hashtags: list[str] = Field(default_factory=lambda: ["#Shorts", "#Twitch", "#Gaming"])
     description_footer: str = ""
+
+    @field_validator("ollama_url")
+    @classmethod
+    def _local_only(cls, value: str) -> str:
+        value = value.strip().rstrip("/") or "http://127.0.0.1:11434"
+        if not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$", value):
+            raise ValueError("Ollama must run on this computer, e.g. http://127.0.0.1:11434")
+        return value
 
 
 class WhisperSettings(BaseModel):
@@ -131,6 +142,10 @@ class ScheduleSettings(BaseModel):
 
 
 class SelectionSettings(BaseModel):
+    # trending: clips from the last few hours that are gaining views fastest right now.
+    # top24h: the most-viewed clips created in the last 24 hours.
+    discovery: Literal["trending", "top24h"] = "trending"
+    trending_window_hours: int = Field(6, ge=1, le=24, description="How recent a trending clip must be")
     min_seconds: float = 8.0
     ideal_min_seconds: float = 15.0
     ideal_max_seconds: float = 45.0
@@ -190,7 +205,8 @@ class GlobalSettings(BaseModel):
 
 class CategorySettings(BaseModel):
     min_views: int = Field(50, ge=0)
-    max_age_hours: int = Field(48, ge=1, le=24 * 30)
+    discovery: Literal["inherit", "trending", "top24h"] = "inherit"
+    max_age_hours: int = Field(48, ge=1, le=24 * 30)  # superseded by `discovery`; kept so old settings load
     language: str = ""  # ISO 639-1, empty = any
     max_clips_per_day: int = Field(3, ge=0, le=50)
     allowlist: list[str] = Field(default_factory=list)
