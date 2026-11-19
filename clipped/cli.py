@@ -223,6 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="app = Edge/Chrome app window, native = pywebview, browser = a normal tab")
     a.set_defaults(func=cmd_app)
 
+    st = sub.add_parser("selftest-window", help=argparse.SUPPRESS)  # used by the release build
+    st.set_defaults(func=lambda args: __import__("clipped.selftest", fromlist=["run"]).run())
+
     sc = sub.add_parser("shortcut", help="add clipped to the Desktop and Start Menu")
     sc.set_defaults(func=cmd_shortcut)
 

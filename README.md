@@ -30,7 +30,7 @@ Download the latest build from the [Releases page](https://github.com/ritviksaje
 
 | OS | File | Run |
 | --- | --- | --- |
-| Windows 10/11 x64 | `clipped-windows-x64.zip` | double-click `clipped.exe` (SmartScreen: *More info → Run anyway*) |
+| Windows 10/11 x64 | `clipped-windows-x64-setup.exe` | run it: installs for your user (no admin), adds Start Menu and Desktop icons. SmartScreen: *More info → Run anyway*. A portable `clipped-windows-x64.zip` is there too. |
 | macOS Apple Silicon | `clipped-macos-arm64.zip` | right-click `clipped` → *Open* the first time (the build is unsigned) |
 | macOS Intel | `clipped-macos-x64.zip` | same as above |
 | Linux x64 | `clipped-linux-x64.tar.gz` | `./clipped/clipped` |

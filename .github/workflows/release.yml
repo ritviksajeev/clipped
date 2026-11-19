@@ -53,6 +53,38 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then dist/clipped/clipped-cli.exe doctor; else dist/clipped/clipped-cli doctor; fi
           test -f "dist/clipped/clipped$([ "$RUNNER_OS" = "Windows" ] && echo .exe)"
+      - name: Packaged app opens its window (Windows)
+        # The frozen build must carry pywebview, WebView2 and the .NET bridge:
+        # open the real window from the exe and run the window checks.
+        if: runner.os == 'Windows'
+        timeout-minutes: 6
+        run: dist/clipped/clipped-cli.exe selftest-window
+      - name: Installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.1.0" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\clipped.iss
+          if (-not (Test-Path dist\clipped-windows-x64-setup.exe)) { throw "installer was not built" }
+      - name: Installer installs and uninstalls (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Start-Process dist\clipped-windows-x64-setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          $app = "$env:LOCALAPPDATA\Programs\clipped"
+          if (-not (Test-Path "$app\clipped.exe")) { throw "clipped.exe was not installed" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\clipped.lnk")) { throw "no Start Menu icon" }
+          & "$app\clipped-cli.exe" doctor
+          Start-Process "$app\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path "$app\clipped.exe") { throw "uninstall left clipped.exe behind" }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: clipped-windows-x64-setup.exe
+          path: dist/clipped-windows-x64-setup.exe
+          if-no-files-found: error
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -71,7 +103,8 @@ jobs:
 
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    # Publish whatever built (the Windows installer must not wait on a flaky macOS runner).
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -542,7 +542,9 @@ def _exit_soon(grace: float = 5.0) -> None:
 def launch_command() -> tuple[str, list[str]]:
     """How a shortcut should start the app without a console window."""
     if getattr(sys, "frozen", False):
-        return sys.executable, []
+        exe = Path(sys.executable)
+        app = exe.with_name("clipped.exe" if sys.platform == "win32" else "clipped")
+        return str(app if app.exists() else exe), []  # the windowed app, not clipped-cli
     exe = Path(sys.executable)
     pythonw = exe.with_name("pythonw.exe")
     if sys.platform == "win32" and pythonw.exists():
